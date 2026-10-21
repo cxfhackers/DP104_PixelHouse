@@ -22,7 +22,7 @@ MODES = {0: "熄屏", 1: "打字", 2: "自定义", 3: "连接状态", 4: "烟花
 
 
 class TransferError(RuntimeError):
-    """The CDC transfer did not finish with valid firmware acknowledgements."""
+    """The animation transfer did not finish with valid firmware acknowledgements."""
 
 
 def normalize_serial(value) -> str:
@@ -48,14 +48,27 @@ def find_port(keyboard: dict) -> str | None:
     return candidates[0].device if candidates else None
 
 
-def hid_command(device, payload: list[int], timeout: float = 0.25) -> bytes | None:
-    device.write([0] + (payload + [0] * 31)[:31])
+def hid_command(device, payload: list[int], timeout: float = 0.25,
+                trace: dict | None = None) -> bytes | None:
+    if len(payload) > 32:
+        raise ValueError("HID 报告不能超过 32 字节")
+    # Report ID 0 precedes a 32-byte vendor report on both hidapi and WebHID.
+    device.write([0] + (payload + [0] * 32)[:32])
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         result = device.read(64)
         if result:
             reply = bytes(result)
-            expected = bytes(payload[:3] if payload[0] in (0x07, 0x08) else payload[:2])
+            if trace is not None:
+                trace["reports"] = trace.get("reports", 0) + 1
+                if reply[0] == payload[0]:
+                    # D1/30 is a header only: these bytes cannot contain artwork
+                    # or key presses, so they are safe to show as diagnostics.
+                    trace["matching_opcode"] = (len(reply), reply[:8].hex(), reply[-1])
+                elif len(trace.setdefault("other_opcodes", [])) < 4:
+                    trace["other_opcodes"].append(f"0x{reply[0]:02X}")
+            expected = bytes(payload if payload[0] == 0xD1 else
+                             payload[:3] if payload[0] in (0x07, 0x08) else payload[:2])
             if reply[0] == 0xFF or reply[:len(expected)] == expected:
                 return reply
         time.sleep(0.004)
@@ -108,11 +121,23 @@ def probe_serial(port_name: str) -> None:
         cdc_command(port, 0xEF, response=False)
 
 
-def upload_animation(port_name: str, frames: list[bytes], fps: int = 8) -> dict:
+def hid_cdc_support(device) -> bool | None:
+    """Ask the keyboard which upload transport its firmware advertises."""
+    reply = hid_command(device, [0xBF], timeout=0.5)
+    if reply is None or len(reply) < 2 or reply[0] != 0xBF or reply[1] not in (0, 1):
+        return None
+    return bool(reply[1])
+
+
+def _validate_animation(frames: list[bytes], fps: int) -> None:
     if not frames or len(frames) > MAX_FRAMES or any(len(frame) != ROWS * COLS * 3 for frame in frames):
         raise ValueError(f"动画需为 1-{MAX_FRAMES} 帧，每帧 8×24 HSV")
     if not 1 <= fps <= 30:
         raise ValueError("帧率无效")
+
+
+def upload_animation(port_name: str, frames: list[bytes], fps: int = 8) -> dict:
+    _validate_animation(frames, fps)
     with serial.Serial(port_name, 115200, timeout=0.2, write_timeout=1.0) as port:
         port.reset_output_buffer()
         port.reset_input_buffer()
@@ -145,7 +170,47 @@ def upload_animation(port_name: str, frames: list[bytes], fps: int = 8) -> dict:
     return {"frames": len(frames), "chunks": chunks_sent, "acknowledged": needs_ack}
 
 
+def upload_animation_hid(device, frames: list[bytes], fps: int = 8) -> dict:
+    """Official-client HID fallback: D1/30 header, then D1/31 25-byte chunks."""
+    _validate_animation(frames, fps)
+    trace = {}
+    header = hid_command(device, [0xD1, 0x30, len(frames), fps, ROWS, COLS], timeout=0.8,
+                         trace=trace)
+    if header is None:
+        if "matching_opcode" in trace:
+            length, prefix, status = trace["matching_opcode"]
+            raise TransferError(f"HID 帧头回执不匹配：长度 {length}，前 8 字节 {prefix}，末字节 0x{status:02X}")
+        if trace.get("reports"):
+            others = ", ".join(trace.get("other_opcodes", []))
+            raise TransferError(f"未收到 HID 帧头回执；收到 {trace['reports']} 条其他报告（{others}）")
+        raise TransferError("发送 HID 帧头后，未收到任何输入报告")
+    if header[0] == 0xFF:
+        raise TransferError("键盘返回 HID 动画帧头拒绝码 0xFF")
+    if len(header) < 32:
+        raise TransferError(f"HID 动画帧头回执长度异常：{len(header)} 字节")
+    if header[-1] != 0:
+        raise TransferError(f"键盘拒绝 HID 动画帧头，状态码 0x{header[-1]:02X}")
+    data = b"".join(frames)
+    for offset in range(0, len(data), 25):
+        chunk = data[offset:offset + 25]
+        payload = [0xD1, 0x31, *offset.to_bytes(4, "big"), len(chunk), *chunk]
+        reply = hid_command(device, payload, timeout=0.8)
+        if reply is None or reply[0] == 0xFF or len(reply) < len(payload):
+            raise TransferError(f"键盘 HID 未确认动画分片 {offset}")
+    return {"frames": len(frames), "chunks": (len(data) + 24) // 25, "acknowledged": True}
+
+
 def send_animation(device, port_name: str, frames: list[bytes], fps: int = 8) -> dict:
+    return _send_animation_with_transfer(device, lambda: upload_animation(port_name, frames, fps))
+
+
+def send_animation_hid(device, frames: list[bytes], fps: int = 8) -> dict:
+    # The official HID client transfers while the current screen mode remains
+    # unchanged. Switching to CUSTOM first can make this firmware reject D1/30.
+    return upload_animation_hid(device, frames, fps)
+
+
+def _send_animation_with_transfer(device, transfer) -> dict:
     """Select CUSTOM before transfer; reselecting afterward overwrites fresh frames."""
     current = hid_command(device, [0x08, 26, 2])
     if current is None or current[0] == 0xFF or len(current) < 4:
@@ -157,7 +222,7 @@ def send_animation(device, port_name: str, frames: list[bytes], fps: int = 8) ->
             raise RuntimeError("无法切换自定义屏幕模式")
         time.sleep(0.2)
     try:
-        receipt = upload_animation(port_name, frames, fps)
+        receipt = transfer()
     except Exception:
         if previous_mode != 2:
             try:
@@ -185,6 +250,7 @@ class DeviceWorker:
         self.stop_event = threading.Event()
         self.serial_failed = False
         self.serial_error = ""
+        self.transport = None
         self.last_serial_probe = 0.0
         self.uploading = False
         self.thread = threading.Thread(target=self._run, name="dp104-device", daemon=True)
@@ -199,10 +265,11 @@ class DeviceWorker:
     def send(self, action: str, value) -> None:
         self.commands.put((action, value))
 
-    def _serial_state(self, descriptor: dict) -> dict:
+    def _serial_state(self, descriptor: dict, device=None) -> dict:
         port = find_port(descriptor)
         state = {"connected": True, "serial": False, "port": port,
-                 "serial_error": "", "serial_verified": False}
+                 "serial_error": "", "serial_verified": False, "transport": None,
+                 "cdc_support": hid_cdc_support(device) if device is not None else None}
         if port:
             if sys.platform == "darwin":
                 # Opening a CDC port may disturb this firmware. On macOS,
@@ -223,8 +290,18 @@ class DeviceWorker:
                     state["serial_error"] = self.serial_error
         else:
             self.serial_failed = True
-            self.serial_error = "未检测到串口"
+            self.serial_error = ("固件要求 CDC，但未检测到 USB CDC 串口"
+                                 if state["cdc_support"] is True else
+                                 "HID 上传能力待确认（CDC 串口未出现）")
             state["serial_error"] = self.serial_error
+        if state["cdc_support"] is False:
+            state["transport"] = "hid"
+            self.serial_failed = False
+            self.serial_error = ""
+            state["serial_error"] = ""
+        elif state["serial"]:
+            state["transport"] = "cdc"
+        self.transport = state["transport"]
         self.last_serial_probe = time.monotonic()
         return state
 
@@ -247,21 +324,25 @@ class DeviceWorker:
             if not descriptor:
                 self.serial_failed = False
                 self.serial_error = ""
+                self.transport = None
                 while True:
                     try:
-                        self.commands.get_nowait()
-                        self.updates.put(("notice", "键盘未连接，操作未执行"))
+                        action, _ = self.commands.get_nowait()
+                        if action == "probe_serial":
+                            self.updates.put(("probe_result", "未检测到 DP104 专用 HID 接口；请检查 USB 有线连接"))
+                        else:
+                            self.updates.put(("notice", "键盘未连接，操作未执行"))
                     except queue.Empty:
                         break
                 self.metrics.reset_matrix()
-                self.updates.put(("device", {"connected": False, "serial": False}))
+                self.updates.put(("device", {"connected": False, "serial": False, "transport": None}))
                 self.stop_event.wait(2)
                 continue
             device = hid.device()
             try:
                 device.open_path(descriptor["path"])
                 device.set_nonblocking(1)
-                self.updates.put(("device", self._serial_state(descriptor)))
+                self.updates.put(("device", self._serial_state(descriptor, device)))
                 last_settings = 0.0
                 while not self.stop_event.is_set():
                     try:
@@ -287,30 +368,39 @@ class DeviceWorker:
                         frames, fps = value if isinstance(value, tuple) and len(value) == 2 \
                             else (value, 8)
                         if self.serial_failed:
-                            self.updates.put(("device", self._serial_state(descriptor)))
-                        if self.serial_failed:
-                            self.updates.put(("notice", f"串口 {find_port(descriptor) or '未发现'} {self.serial_error}；请退出程序后重新插拔键盘"))
+                            self.updates.put(("device", self._serial_state(descriptor, device)))
+                        if not self.transport:
+                            self.updates.put(("notice", f"画面上传接口不可用：{self.serial_error or '键盘未确认 HID 上传能力'}"))
                             continue
-                        port = find_port(descriptor)
-                        if not port:
+                        port = find_port(descriptor) if self.transport == "cdc" else None
+                        if self.transport == "cdc" and not port:
                             self.updates.put(("notice", "未找到与此键盘匹配的串口"))
                             continue
                         self.updates.put(("notice", "正在传输画面，请勿拔出键盘…"))
                         self.uploading = True
                         try:
-                            receipt = send_animation(device, port, frames, fps)
+                            receipt = (send_animation_hid(device, frames, fps) if self.transport == "hid"
+                                       else send_animation(device, port, frames, fps))
                         except (OSError, serial.SerialException, RuntimeError) as exc:
                             if isinstance(exc, (OSError, serial.SerialException, TransferError)):
                                 self.serial_failed = True
                                 self.serial_error = "写入超时" if isinstance(exc, serial.SerialTimeoutException) else "上传失败"
+                                self.transport = None
                                 self.updates.put(("device", {"connected": True, "serial": False, "port": port,
-                                                             "serial_error": self.serial_error}))
-                            recovery = "若串口写入超时，请拔插 USB；再次上传前先将实体屏幕切到预设画面"
+                                                             "transport": None, "serial_error": self.serial_error}))
+                            recovery = ("请保持实体屏幕在内置预设画面；若再次失败，请反馈上述回执信息"
+                                        if isinstance(exc, TransferError) else
+                                        "若 USB 写入超时，请退出程序并重新插拔键盘")
                             self.updates.put(("notice", f"画面上传未完成验证：{exc}。{recovery}"))
                             continue
                         finally:
                             self.uploading = False
-                        self.updates.put(("mode", 2))
+                        if self.transport == "cdc":
+                            self.updates.put(("mode", 2))
+                        else:
+                            mode_reply = hid_command(device, [0x08, 26, 2])
+                            if mode_reply and len(mode_reply) >= 4 and mode_reply[3] in MODES:
+                                self.updates.put(("mode", mode_reply[3]))
                         confirmation = "分片回执已核对" if receipt["acknowledged"] else "固件未启用分片回执"
                         self.updates.put(("notice", f"已传输 {receipt['frames']} 帧，{confirmation}；请按屏幕旁实体键切到 DIY 查看"))
                     elif action == "text_write":
@@ -380,9 +470,16 @@ class DeviceWorker:
                                     if sub == 4 and len(item) >= 5 else item[3]
                         self.updates.put(("lights_full", data))
                     elif action == "probe_serial":
-                        self.updates.put(("device", self._serial_state(descriptor)))
-                        self.updates.put(("notice", "串口已恢复" if not self.serial_failed else
-                                          f"串口仍不可用：{self.serial_error}"))
+                        state = self._serial_state(descriptor, device)
+                        self.updates.put(("device", state))
+                        if state["transport"] == "hid":
+                            message = "DP104 HID 已连接；固件报告无 CDC，点阵画面可通过 HID 上传"
+                        elif state["serial"]:
+                            message = ("DP104 HID 已连接；USB 串口已发现，上传时验证"
+                                       if not state["serial_verified"] else "DP104 HID 与 USB 串口均已连接")
+                        else:
+                            message = "DP104 HID 已连接；正在确认点阵上传方式，稍后会自动重试"
+                        self.updates.put(("probe_result", message))
                     elif action == "restart_usb":
                         self._restart_usb(descriptor)
                         self.updates.put(("notice", "请确认 Windows 管理员提示；键盘将短暂断开"))
@@ -392,8 +489,8 @@ class DeviceWorker:
                     if matrix is not None and len(matrix) >= 4 and matrix[0] == 0x02:
                         self.metrics.observe(matrix[3:])
                     now = time.monotonic()
-                    if self.serial_failed and now - self.last_serial_probe > 60:
-                        self.updates.put(("device", self._serial_state(descriptor)))
+                    if self.serial_failed and now - self.last_serial_probe > 8:
+                        self.updates.put(("device", self._serial_state(descriptor, device)))
                     if now - last_settings > 5:
                         last_settings = now
                         mode = hid_command(device, [0x08, 26, 2])
@@ -406,7 +503,8 @@ class DeviceWorker:
             except Exception as exc:
                 self.updates.put(("notice", f"键盘通信：{exc}"))
                 self.metrics.reset_matrix()
-                self.updates.put(("device", {"connected": False, "serial": False}))
+                self.transport = None
+                self.updates.put(("device", {"connected": False, "serial": False, "transport": None}))
                 self.stop_event.wait(2)
             finally:
                 try:

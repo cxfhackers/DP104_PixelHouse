@@ -10,6 +10,12 @@
 <body>
 <div id="stage">
   <main id="app" aria-label="DP104 像素屋">
+    <svg id="frame-chrome" viewBox="0 0 1448 1086" aria-hidden="true">
+      <path class="frame-glow" d="M46 58H1041L1081 107H1391L1422 138V1028L1400 1052H48L26 1030V79Z"/>
+      <path class="frame-fine" d="M49 64H1037L1077 113H1388L1415 141V1024L1396 1045H52L33 1026V83Z"/>
+      <path class="frame-roof" d="M1042 58L1081 107H1391L1422 138"/>
+      <path class="frame-corner" d="M29 83V70H42 M1407 1050H1420V1036 M1040 58H1047 M1387 106H1396"/>
+    </svg>
     <header id="topbar" class="glass outer">
       <div id="brand" aria-label="DP104_PixelHouse"><canvas class="brand-cat" id="brand-cat" width="56" height="48" aria-hidden="true"></canvas><strong>DP104_PixelHouse</strong></div>
       <nav id="main-nav" aria-label="主导航">
@@ -18,7 +24,7 @@
         <button class="nav-btn" data-page="setup"><span class="nav-icon">⚙</span> 小屋设置</button>
       </nav>
     </header>
-    <div id="window-actions"><button id="minimize" title="收进菜单栏" aria-label="收进菜单栏">▁</button><button id="exit" title="退出程序" aria-label="退出程序">×</button></div>
+    <div id="window-actions" aria-label="窗口控制"><button id="minimize" title="最小化窗口" aria-label="最小化窗口">—</button><button id="maximize" title="最大化窗口" aria-label="最大化窗口">□</button><button id="exit" title="关闭程序" aria-label="关闭程序">×</button></div>
 
     <section class="page active" id="screen-page">
       <div id="upper">
@@ -29,6 +35,7 @@
           <div class="preview-controls">
             <button class="pixel-btn primary" id="play">▶　播放预览</button>
             <button class="pixel-btn" id="stop">■　停止</button>
+            <span class="control-divider" aria-hidden="true"></span>
             <button class="pixel-btn" id="loop">⟳　循环播放⌄</button>
             <label class="speed-label" for="preview-speed">速度</label>
             <input type="range" id="preview-speed" min="1" max="3" step="0.1" value="1">
@@ -38,8 +45,9 @@
 
         <section id="device-card" class="glass card">
           <div class="card-head"><h1>键盘连接</h1></div>
-          <div id="device-identity" class="inset"><div class="keyboard-icon" aria-hidden="true">▤</div><div><strong>DP104_PixelHouse</strong><span id="device-connection" class="status offline">●　未连接</span></div><button id="probe" title="重新探测键盘" aria-label="重新探测键盘">›</button></div>
+          <div id="device-identity" class="inset"><div class="keyboard-icon" aria-hidden="true"></div><div><strong>DP104_PixelHouse</strong><span id="device-connection" class="status offline">●　未连接</span></div><button id="probe" title="检测 HID 上传与 USB 串口" aria-label="检测 HID 上传与 USB 串口">检测</button></div>
           <h2>设备状态</h2><div class="inset status-panel"><span id="device-health" class="offline">●　等待键盘连接</span><span id="device-port">USB 未连接</span></div>
+          <p id="device-diagnostic" aria-live="polite">点击「检测」查看接口详情</p>
           <div class="divider"></div>
           <label class="field-label" for="device-mode">屏幕模式</label><select id="device-mode"></select>
           <label class="field-label brightness-title" for="brightness">屏幕亮度 <span id="brightness-value">80%</span></label>
@@ -48,7 +56,7 @@
         </section>
       </div>
 
-      <section id="workshop" class="glass card">
+      <section id="workshop" class="glass card effects-view">
         <div id="gallery-tabs" role="tablist" aria-label="工坊功能">
           <button class="gallery-tab active" data-tab="effects" role="tab"><span>✣</span> 内置特效</button>
           <button class="gallery-tab" data-tab="create" role="tab"><span>✎</span> 像素创作</button>

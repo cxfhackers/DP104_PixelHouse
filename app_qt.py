@@ -24,7 +24,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu
 
-from pixelhouse import ai_designer, image_import, lights, pets, presetlib, scheduler, startup, transitions
+from pixelhouse import ai_designer, image_import, lights, pets, presetlib, prototype_scenes, scheduler, startup, transitions
 from pixelhouse.device import DeviceWorker, MODES
 from pixelhouse.effects import COLS, EFFECTS, MAX_FRAMES, ROWS, dim_frames, make_frames
 from pixelhouse.keymap import KEYS as PHYSICAL_KEYS
@@ -99,6 +99,20 @@ def thumbnail_colors(frames: list[bytes]) -> list[str]:
             if frame[offset + 2] > result[offset + 2]:
                 result[offset:offset + 3] = frame[offset:offset + 3]
     return frame_colors(bytes(result))
+
+
+def device_status_text(state: dict) -> str:
+    if not state.get("connected"):
+        return "等待 DP104 USB 键盘连接"
+    if state.get("transport") == "hid":
+        return "HID 已连接；固件报告无 CDC，点阵画面可通过 HID 上传"
+    if state.get("transport") == "cdc":
+        return "HID 已连接；USB CDC 串口已发现，上传时验证"
+    if state.get("serial_error") in ("上传失败", "写入超时"):
+        return f"HID 已连接；上次画面{state['serial_error']}，请点击检测重试"
+    if state.get("cdc_support") is True:
+        return "HID 已连接；固件要求 CDC，但系统尚未发现对应串口"
+    return "HID 已连接；正在确认点阵上传方式，稍后会自动重试"
 
 
 class AutoWorker:
@@ -181,11 +195,12 @@ class PixelHouseQt(QWebEngineView):
         self.milestones = Milestones(data_dir() / "milestone.json", enabled=sys.platform != "darwin")
         self.auto = AutoWorker(self.device, self.milestones, self.updates)
         self.device_state = {"connected": False, "serial": False, "port": None}
+        self.probe_status = ""
         self.lights_state = {"keys": {}, "bar": {}}
         self.mode = None
         self.notice = "小屋已开门，正在寻找 DP104 键盘…" if not self.no_device else "预览模式：未连接实体键盘"
-        self.preview_name = "霓虹小猫"
-        self.preview_frames, self.preview_fps = pets.make_scene("霓虹小猫")
+        self.preview_name = "可爱猫咪"
+        self.preview_frames, self.preview_fps = prototype_scenes.make_scene("可爱猫咪")
         self.preview_index = 0
         self.preview_playing = True
         self.preview_speed = 1.0
@@ -228,10 +243,10 @@ class PixelHouseQt(QWebEngineView):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(130)
         if os.environ.get("DP104_PIXELHOUSE_SMOKE") == "1":
-            QTimer.singleShot(6000, self.close_app)
+            QTimer.singleShot(8500, self.close_app)
         capture = os.environ.get("DP104_PIXELHOUSE_CAPTURE")
         if capture:
-            QTimer.singleShot(3000, lambda: self.grab().save(capture))
+            QTimer.singleShot(5500, lambda: self.grab().save(capture))
         if "--tray" in sys.argv and self.tray:
             QTimer.singleShot(600, self.hide)
         else:
@@ -273,6 +288,8 @@ class PixelHouseQt(QWebEngineView):
             self.hide()
 
     def show_window(self):
+        if self.isMinimized():
+            self.showNormal()
         self.show()
         self.raise_()
         self.activateWindow()
@@ -307,6 +324,7 @@ class PixelHouseQt(QWebEngineView):
             if kind == "device":
                 was_connected = self.device_state.get("connected")
                 self.device_state = value
+                self.probe_status = device_status_text(value)
                 if value.get("connected") and not was_connected:
                     self.device.send("light_read", None)
                 elif not value.get("connected"):
@@ -316,6 +334,9 @@ class PixelHouseQt(QWebEngineView):
                 self.mode = value
             elif kind == "notice":
                 self.notice = str(value)
+            elif kind == "probe_result":
+                self.probe_status = str(value)
+                self.notice = self.probe_status
             elif kind == "ai_result":
                 fps, frames = value
                 self.ai_generating = False
@@ -368,7 +389,7 @@ class PixelHouseQt(QWebEngineView):
 
     def _fire_milestone(self, keys):
         state = self.device_state
-        if state.get("connected") and state.get("serial") and self.mode != 2:
+        if state.get("connected") and state.get("transport") and self.mode != 2:
             self.device.send("animation", (make_milestone_frames(keys), 6))
             self.notice = f"达到 {keys:,} 键，庆祝画面已推送"
         else:
@@ -385,6 +406,9 @@ class PixelHouseQt(QWebEngineView):
         return {
             "effects": list(EFFECTS),
             "effectPreviews": {name: thumbnail_colors(make_frames(name, 16)) for name in EFFECTS},
+            "gallery": list(prototype_scenes.SCENES),
+            "galleryPreviews": {name: frame_colors(prototype_scenes.make_scene(name)[0][0])
+                                for name in prototype_scenes.SCENES},
             "petPreviews": {name: frame_colors(pets.make_scene(name)[0][0]) for name in ("霓虹小猫", "兔兔跳跳")},
             "pets": [{"name": name, "description": description} for name, description, _, _ in pets.SCENES],
             "modes": [{"value": value, "name": name} for value, name in MODES.items()],
@@ -400,8 +424,11 @@ class PixelHouseQt(QWebEngineView):
         port = self.device_state.get("port")
         return {
             "device": {**self.device_state, "mode": self.mode, "modeName": MODES.get(self.mode, "未知模式")},
+            "windowMaximized": self.isMaximized(),
+            "probeStatus": self.probe_status,
             "notice": self.notice, "previewName": self.preview_name,
-            "preview": frame_colors(self.preview_frames[self.preview_index], self.upload_brightness),
+            "preview": frame_colors(self.preview_frames[self.preview_index]),
+            "previewIndex": self.preview_index,
             "previewFps": self.preview_fps, "previewCount": len(self.preview_frames),
             "playing": self.preview_playing, "brightness": round(self.upload_brightness * 100 / 255),
             "uploading": bool(getattr(self.device, "uploading", False)),
@@ -414,18 +441,19 @@ class PixelHouseQt(QWebEngineView):
             "milestoneEnabled": self.milestones.enabled, "milestoneStep": self.milestones.step,
             "startupEnabled": startup.is_enabled(), "slots": self.slots, "slotIndex": self.slot_index,
             "lights": self.lights_state, "lightsLoaded": {group: all(sub in self.lights_state.get(group, {}) for sub in (1, 2, 3, 4)) for group in ("keys", "bar")},
-            "connectionText": ("键盘未连接" if not connected else f"{port or '串口未找到'} · {MODES.get(self.mode, '未知模式')}")
+            "connectionText": ("键盘未连接" if not connected else
+                               f"HID 已连接 · {'HID 画面上传' if self.device_state.get('transport') == 'hid' else port or '画面上传接口未就绪'} · {MODES.get(self.mode, '未知模式')}")
         }
 
     def _upload(self):
         if not self.device_state.get("connected"):
             self.notice = "尚未连接键盘；画面已留在预览，连接后再上屏"
             return
-        if not self.device_state.get("serial"):
-            self.notice = "USB 串口不可用，请检查连接后重试"
+        if not self.device_state.get("transport"):
+            self.notice = "画面上传接口不可用；请点击检测查看固件支持方式"
             return
         self.device.send("animation", (dim_frames(self.preview_frames, self.upload_brightness), self.preview_fps))
-        self.notice = "正在检查串口并发送画面…"
+        self.notice = "正在发送画面…"
 
     def _dialog_open(self, title, filter_):
         path, _ = QFileDialog.getOpenFileName(self, title, "", filter_, options=QFileDialog.Option.DontUseNativeDialog)
@@ -439,8 +467,12 @@ class PixelHouseQt(QWebEngineView):
         if name == "window_drag":
             self.move(self.pos().x() + int(data.get("dx", 0)), self.pos().y() + int(data.get("dy", 0)))
         elif name == "window_start_drag":
-            if self.windowHandle():
+            if not self.isMaximized() and self.windowHandle():
                 self.windowHandle().startSystemMove()
+        elif name == "window_minimize":
+            self.showMinimized()
+        elif name == "window_toggle_maximize":
+            self.showNormal() if self.isMaximized() else self.showMaximized()
         elif name == "window_close":
             self.close_app()
         elif name == "window_hide":
@@ -454,8 +486,11 @@ class PixelHouseQt(QWebEngineView):
             self.device.send("mode", value)
             self.notice = f"正在切换到「{MODES[value]}」…"
         elif name == "probe":
+            if self.no_device:
+                raise ValueError("当前是无设备预览模式；请正常启动应用后重试")
             self.device.send("probe_serial", None)
-            self.notice = "正在重新探测 DP104…"
+            self.probe_status = "正在检测 HID 上传能力和 USB 串口…"
+            self.notice = "正在检测 DP104 上传接口…"
         elif name == "restart_usb":
             if os.name != "nt":
                 raise ValueError("USB 软件重启仅在 Windows 可用")
@@ -466,6 +501,10 @@ class PixelHouseQt(QWebEngineView):
         elif name == "effect":
             effect = str(data["name"])
             self.set_preview(effect, make_frames(effect), 8)
+        elif name == "gallery":
+            scene = str(data["name"])
+            frames, fps = prototype_scenes.make_scene(scene)
+            self.set_preview(scene, frames, fps)
         elif name == "pet":
             pet = str(data["name"])
             frames, fps = pets.make_scene(pet)
@@ -479,6 +518,10 @@ class PixelHouseQt(QWebEngineView):
         elif name == "upload":
             if not data.get("confirmed"):
                 raise ValueError("请先确认上传前的屏幕模式提示")
+            if "scene" in data:
+                scene = str(data["scene"])
+                frames, fps = prototype_scenes.make_scene(scene)
+                self.set_preview(scene, frames, fps)
             self._upload()
         elif name == "save_preset":
             presetlib.save(str(data["name"]).strip(), self.preview_frames, self.preview_fps, "manual")
@@ -655,6 +698,7 @@ def main():
     ensure_ascii_qt_plugin_path()
     app = QApplication(sys.argv)
     app.setApplicationName("DP104_PixelHouse")
+    app.setWindowIcon(QIcon(str(ROOT / "pixelhouse" / "assets" / "pixelhouse-icon.png")))
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet("QFileDialog,QMessageBox{background:#101947;color:#eef2ff;} QFileDialog QWidget{color:#eef2ff;background:#101947;} QFileDialog QPushButton,QMessageBox QPushButton{background:#273c9a;color:#eef2ff;border:2px solid #829ff2;padding:7px 14px;} QFileDialog QLineEdit,QFileDialog QComboBox{background:#0b163f;color:#eef2ff;border:1px solid #829ff2;padding:5px;} QFileDialog QListView,QFileDialog QTreeView{background:#0b163f;color:#eef2ff;selection-background-color:#385bc2;}")
     try:

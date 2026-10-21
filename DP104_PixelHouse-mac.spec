@@ -34,5 +34,6 @@ app_bundle = BUNDLE(
     bundle_files,
     name='DP104_PixelHouse.app',
     bundle_identifier='com.cxfhackers.dp104pixelhouse',
+    icon='pixelhouse/assets/pixelhouse.icns',
     info_plist={'NSHighResolutionCapable': True},
 )

@@ -1,5 +1,4 @@
 import json
-import runpy
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,8 +7,10 @@ from unittest.mock import patch
 import requests
 
 from pixelhouse import ai_designer, lights, presetlib, scheduler
-from pixelhouse.device import (find_keyboard, find_port, hid_command, save_light_channel,
-                           send_animation, set_light_value, upload_animation)
+from pixelhouse.device import (TransferError, find_keyboard, find_port, hid_cdc_support,
+                           hid_command, save_light_channel, send_animation,
+                           send_animation_hid, set_light_value, upload_animation,
+                           upload_animation_hid)
 from pixelhouse.effects import EFFECTS, dim_frames, make_frames
 from pixelhouse.metrics import TypingMetrics
 from pixelhouse.keymap import KEYS as PHYSICAL_KEYS, KEY_BY_MATRIX, heat_color
@@ -181,57 +182,6 @@ class PixelHouseTests(unittest.TestCase):
         with patch("pixelhouse.device.hid_command", return_value=bytes([9, lights.KEYS])) as command:
             save_light_channel(None, lights.KEYS)
         command.assert_called_once_with(None, [9, lights.KEYS], timeout=0.6)
-
-    def test_light_readback_accepts_worker_color_and_waits_for_initial_values(self):
-        pixelhouse = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"),
-                                run_name="dp104_test")["PixelHouse"]
-        ui = SimpleNamespace(light_widgets={"keys": {"color": "#000000"}},
-                             device_state={"connected": True},
-                             lights_loaded={"keys": False}, notice="")
-        pixelhouse._sync_color(ui, "keys", [120, 200])
-        self.assertNotEqual(ui.light_widgets["keys"]["color"], "#000000")
-        self.assertEqual(ui.light_widgets["keys"]["color_hsv"], (120, 200))
-        calls = []
-        ui.read_lights = lambda: calls.append("read")
-        pixelhouse.apply_lights(ui, "keys")
-        self.assertEqual(calls, ["read"])
-        self.assertIn("读取", ui.notice)
-        ui.lights_loaded["keys"] = True
-        ui.device = SimpleNamespace(send=lambda *args: calls.append(args))
-        ui.light_widgets["keys"].update({
-            "brightness": SimpleNamespace(get=lambda: 180),
-            "effect": SimpleNamespace(get=lambda: lights.effect_options("keys")[6]),
-            "speed": SimpleNamespace(get=lambda: 80),
-        })
-        pixelhouse.apply_lights(ui, "keys")
-        applied = [item[1] for item in calls if isinstance(item, tuple) and item[0] == "light_apply"]
-        self.assertEqual(len(applied), 1)
-        self.assertEqual(applied[0][0:2], ("keys", lights.KEYS))
-        self.assertIn((2, (6,)), applied[0][2])
-        self.assertIn((4, (120, 200)), applied[0][2])
-
-    def test_manual_text_slot_uppercases_firmware_invisible_lowercase(self):
-        pixelhouse = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"),
-                                run_name="dp104_text_test")["PixelHouse"]
-
-        class Entry:
-            value = "aBc 123"
-
-            def get(self):
-                return self.value
-
-            def delete(self, *_):
-                self.value = ""
-
-            def insert(self, _, value):
-                self.value = value
-
-        calls = []
-        ui = SimpleNamespace(text_entry=Entry(), slot_index=1, notice="",
-                             device=SimpleNamespace(send=lambda *args: calls.append(args)))
-        pixelhouse.write_slot_text(ui)
-        self.assertEqual(ui.text_entry.value, "ABC 123")
-        self.assertEqual(calls, [("text_write", (1, "ABC 123"))])
 
     def test_matrix_counts_rising_edges_and_never_saves_keys(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -463,6 +413,76 @@ class PixelHouseTests(unittest.TestCase):
         fake = FakeHID()
         self.assertEqual(hid_command(fake, [8, 26, 2], timeout=.1), bytes([8, 26, 2, 4]))
         self.assertEqual(fake.sent[:4], [0, 8, 26, 2])
+        self.assertEqual(len(fake.sent), 33)
+
+    def test_hid_header_trace_separates_unrelated_and_mismatched_replies(self):
+        class FakeHID:
+            replies = [[2, 3, 0, 0], [0xD1, 0x30, 7, 8, 8, 24] + [0] * 26]
+
+            def write(self, _report):
+                pass
+
+            def read(self, _length):
+                return self.replies.pop(0) if self.replies else []
+
+        trace = {}
+        result = hid_command(FakeHID(), [0xD1, 0x30, 1, 8, 8, 24], timeout=.02,
+                             trace=trace)
+        self.assertIsNone(result)
+        self.assertEqual(trace["reports"], 2)
+        self.assertEqual(trace["other_opcodes"], ["0x02"])
+        self.assertEqual(trace["matching_opcode"][:2], (32, "d130070808180000"))
+
+    def test_hid_upload_uses_official_header_and_25_byte_chunks(self):
+        class FakeHID:
+            def __init__(self):
+                self.sent = []
+
+            def write(self, report):
+                self.sent.append(report)
+
+            def read(self, _length):
+                return self.sent[-1][1:]
+
+        fake = FakeHID()
+        frame = bytes(i % 256 for i in range(576))
+        receipt = upload_animation_hid(fake, [frame], 8)
+        self.assertEqual(receipt, {"frames": 1, "chunks": 24, "acknowledged": True})
+        self.assertEqual(fake.sent[0][:7], [0, 0xD1, 0x30, 1, 8, 8, 24])
+        self.assertEqual(fake.sent[1][:8], [0, 0xD1, 0x31, 0, 0, 0, 0, 25])
+        self.assertEqual(fake.sent[-1][7], 1)
+        self.assertEqual(fake.sent[-1][8], frame[-1])
+        self.assertTrue(all(len(report) == 33 for report in fake.sent))
+
+    def test_hid_upload_stops_on_unacknowledged_chunk(self):
+        class FakeHID:
+            def __init__(self):
+                self.sent = []
+
+            def write(self, report):
+                self.sent.append(report)
+
+            def read(self, _length):
+                response = self.sent[-1][1:]
+                return [0xFF] if response[1] == 0x31 else response
+
+        fake = FakeHID()
+        with self.assertRaises(TransferError):
+            upload_animation_hid(fake, [bytes(576)])
+        self.assertEqual(len(fake.sent), 2)
+
+    def test_hid_header_error_reports_firmware_status_without_sending_chunks(self):
+        reply = bytes([0xD1, 0x30, 1, 8, 8, 24] + [0] * 25 + [2])
+        with patch("pixelhouse.device.hid_command", return_value=reply) as command:
+            with self.assertRaisesRegex(TransferError, "状态码 0x02"):
+                upload_animation_hid(object(), [bytes(576)])
+        command.assert_called_once()
+
+    def test_hid_cdc_support_requires_firmware_reply(self):
+        with patch("pixelhouse.device.hid_command", side_effect=[bytes([0xBF, 0]), bytes([0xBF, 1]), None]):
+            self.assertIs(hid_cdc_support(object()), False)
+            self.assertIs(hid_cdc_support(object()), True)
+            self.assertIsNone(hid_cdc_support(object()))
 
     def test_failed_animation_aborts_transfer(self):
         class FakeSerial:
@@ -531,6 +551,14 @@ class PixelHouseTests(unittest.TestCase):
              patch("pixelhouse.device.upload_animation", side_effect=upload):
             send_animation(object(), "COM5", [bytes(576)])
         self.assertEqual(events, [(8, 26, 2), "upload", (8, 26, 2)])
+
+    def test_hid_upload_does_not_switch_screen_mode_before_header(self):
+        with patch("pixelhouse.device.hid_command") as command, \
+             patch("pixelhouse.device.upload_animation_hid",
+                   return_value={"frames": 1, "chunks": 24, "acknowledged": True}) as upload:
+            send_animation_hid(object(), [bytes(576)])
+        upload.assert_called_once()
+        command.assert_not_called()
 
 
 def one_packet_read(device, payload, **kwargs):

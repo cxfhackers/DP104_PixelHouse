@@ -42,6 +42,32 @@ class MacSupportTests(unittest.TestCase):
         self.assertTrue(state["serial"])
         self.assertFalse(state["serial_verified"])
 
+    def test_hid_connection_remains_visible_without_cdc_port(self):
+        worker = device.DeviceWorker(None, queue.Queue())
+        with patch("pixelhouse.device.find_port", return_value=None):
+            state = worker._serial_state({"serial_number": "ABC"})
+        self.assertTrue(state["connected"])
+        self.assertFalse(state["serial"])
+        self.assertEqual(state["serial_error"], "HID 上传能力待确认（CDC 串口未出现）")
+
+    def test_firmware_without_cdc_selects_hid_upload(self):
+        worker = device.DeviceWorker(None, queue.Queue())
+        with patch("pixelhouse.device.find_port", return_value=None), \
+             patch("pixelhouse.device.hid_cdc_support", return_value=False):
+            state = worker._serial_state({"serial_number": "ABC"}, object())
+        self.assertTrue(state["connected"])
+        self.assertFalse(state["serial"])
+        self.assertEqual(state["transport"], "hid")
+        self.assertFalse(worker.serial_failed)
+
+    def test_unknown_hid_upload_capability_does_not_send_blindly(self):
+        worker = device.DeviceWorker(None, queue.Queue())
+        with patch("pixelhouse.device.find_port", return_value=None), \
+             patch("pixelhouse.device.hid_cdc_support", return_value=None):
+            state = worker._serial_state({"serial_number": "ABC"}, object())
+        self.assertIsNone(state["transport"])
+        self.assertTrue(worker.serial_failed)
+
     def test_mac_startup_writes_valid_current_user_launch_agent(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Library" / "LaunchAgents" / "agent.plist"
@@ -59,6 +85,11 @@ class MacSupportTests(unittest.TestCase):
         with patch("pixelhouse.paths.sys.platform", "darwin"), \
              patch("pixelhouse.paths.Path.home", return_value=Path("/Users/example")):
             self.assertEqual(data_dir(), Path("/Users/example/Library/Application Support/DP104_PixelHouse"))
+
+    def test_packaged_windows_startup_command_uses_current_exe(self):
+        path = Path("C:/Program Files/DP104/DP104_PixelHouse.exe")
+        with patch.object(startup.sys, "frozen", True, create=True):
+            self.assertEqual(startup.command_for_app(path), f'"{path.resolve()}" --tray')
 
 
 if __name__ == "__main__":
