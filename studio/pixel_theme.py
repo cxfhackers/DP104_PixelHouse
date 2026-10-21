@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import colorsys
 import re
+import sys
 import tkinter as tk
 
 from .effects import COLS, ROWS
@@ -18,8 +19,8 @@ MINT = "#a7e6cf"
 PINK = "#ffc3d8"
 YELLOW = "#ffe491"
 SHADOW = "#a2a6ce"
-FONT = "Microsoft YaHei UI"
-PIXEL_FONT = "Consolas"
+FONT = "PingFang SC" if sys.platform == "darwin" else "Microsoft YaHei UI"
+PIXEL_FONT = "Menlo" if sys.platform == "darwin" else "Consolas"
 
 
 def label(parent, text: str, size=11, color=INK, bold=False, **kwargs):

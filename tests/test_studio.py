@@ -439,7 +439,7 @@ class StudioTests(unittest.TestCase):
         self.assertLess(abs(hue - 85), 6)
 
     def test_keyboard_and_serial_are_matched_by_identity(self):
-        descriptor = {"interface_number": 1, "usage_page": 0xFF60,
+        descriptor = {"interface_number": 1, "usage_page": 0xFF60, "usage": 0x61,
                       "serial_number": "F576C7BF C93C817", "path": b"device"}
         ports = [SimpleNamespace(vid=0xE560, pid=0xE104, serial_number="OTHER", device="COM4"),
                  SimpleNamespace(vid=0xE560, pid=0xE104,

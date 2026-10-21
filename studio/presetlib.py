@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 from .effects import MAX_FRAMES, COLS, ROWS
+from .paths import data_dir
 
 SAFE_NAME = re.compile(r"[\\/:*?\"<>|]+")
 
@@ -19,8 +20,7 @@ SAFE_NAME = re.compile(r"[\\/:*?\"<>|]+")
 def library_dir(override: Path | None = None) -> Path:
     if override is not None:
         return override
-    base = Path(__import__("os").environ.get("LOCALAPPDATA", str(Path.home())))
-    return base / "DP104Studio" / "presets"
+    return data_dir() / "presets"
 
 
 def _file_for(name: str, directory: Path) -> Path:

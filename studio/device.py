@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import queue
+import sys
 import threading
 import time
 
@@ -29,7 +31,9 @@ def normalize_serial(value) -> str:
 
 def find_keyboard() -> dict | None:
     matches = [item for item in hid.enumerate(VID, PID)
-               if item.get("interface_number") == 1 and item.get("usage_page") == 0xFF60]
+               if item.get("usage_page") == 0xFF60
+               and (item.get("usage") == 0x61 if sys.platform == "darwin"
+                    else item.get("interface_number") == 1)]
     matches.sort(key=lambda item: (normalize_serial(item.get("serial_number")), str(item.get("path"))))
     return matches[0] if matches else None
 
@@ -37,10 +41,11 @@ def find_keyboard() -> dict | None:
 def find_port(keyboard: dict) -> str | None:
     serial_id = normalize_serial(keyboard.get("serial_number"))
     matches = [port for port in list_ports.comports()
-               if port.vid == VID and port.pid == PID
-               and normalize_serial(port.serial_number) == serial_id]
-    matches.sort(key=lambda port: port.device)
-    return matches[0].device if matches else None
+               if port.vid == VID and port.pid == PID]
+    exact = [port for port in matches if serial_id and normalize_serial(port.serial_number) == serial_id]
+    candidates = exact or (matches if sys.platform == "darwin" and len(matches) == 1 else [])
+    candidates.sort(key=lambda port: (not port.device.startswith("/dev/cu."), port.device))
+    return candidates[0].device if candidates else None
 
 
 def hid_command(device, payload: list[int], timeout: float = 0.25) -> bytes | None:
@@ -197,17 +202,25 @@ class DeviceWorker:
     def _serial_state(self, descriptor: dict) -> dict:
         port = find_port(descriptor)
         state = {"connected": True, "serial": False, "port": port,
-                 "serial_error": ""}
+                 "serial_error": "", "serial_verified": False}
         if port:
-            try:
-                probe_serial(port)
+            if sys.platform == "darwin":
+                # Opening a CDC port may disturb this firmware. On macOS,
+                # discovery is deliberately passive; transfer validates it.
                 self.serial_failed = False
                 self.serial_error = ""
                 state["serial"] = True
-            except (OSError, serial.SerialException) as exc:
-                self.serial_failed = True
-                self.serial_error = "写入超时" if isinstance(exc, serial.SerialTimeoutException) else "无法打开"
-                state["serial_error"] = self.serial_error
+            else:
+                try:
+                    probe_serial(port)
+                    self.serial_failed = False
+                    self.serial_error = ""
+                    state["serial"] = True
+                    state["serial_verified"] = True
+                except (OSError, serial.SerialException) as exc:
+                    self.serial_failed = True
+                    self.serial_error = "写入超时" if isinstance(exc, serial.SerialTimeoutException) else "无法打开"
+                    state["serial_error"] = self.serial_error
         else:
             self.serial_failed = True
             self.serial_error = "未检测到串口"
@@ -217,6 +230,8 @@ class DeviceWorker:
 
     @staticmethod
     def _restart_usb(descriptor: dict) -> None:
+        if os.name != "nt":
+            raise OSError("此系统不支持程序内重启 USB；请退出控制程序后重新插拔键盘")
         serial_id = str(descriptor.get("serial_number") or "").replace(" ", "_")
         if not serial_id or len(serial_id) > 64 or not all(c.isalnum() or c in "_-" for c in serial_id):
             raise RuntimeError("无法安全确定键盘 USB 实例")
@@ -274,7 +289,7 @@ class DeviceWorker:
                         if self.serial_failed:
                             self.updates.put(("device", self._serial_state(descriptor)))
                         if self.serial_failed:
-                            self.updates.put(("notice", f"串口 {find_port(descriptor) or '未发现'} {self.serial_error}；可重启 USB 或拔插键盘"))
+                            self.updates.put(("notice", f"串口 {find_port(descriptor) or '未发现'} {self.serial_error}；请退出程序后重新插拔键盘"))
                             continue
                         port = find_port(descriptor)
                         if not port:

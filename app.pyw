@@ -1,4 +1,4 @@
-"""DP104 Studio — a small pixel cottage for a Windows keyboard."""
+"""DP104 Studio — a small pixel cottage for the DP104 keyboard."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -24,6 +25,7 @@ from studio.effects import COLS, EFFECTS, MAX_FRAMES, ROWS, dim_frames, make_fra
 from studio.metrics import TypingMetrics
 from studio.keymap import KEYS as PHYSICAL_KEYS, KEY_BY_MATRIX, heat_color
 from studio.milestones import Milestones
+from studio.paths import data_dir
 from studio.pixel_theme import (BG, BLUE, CAT, FONT, INK, LILAC, MINT, MUTED,
                                 PAPER, PINK, PIXEL_FONT, YELLOW, PixelDropdown,
                                 ask_color, ask_confirm, ask_text, button,
@@ -33,6 +35,18 @@ from studio.presets import make_milestone_frames
 
 
 def acquire_mutex():
+    if sys.platform == "darwin":
+        import fcntl
+
+        lock_path = data_dir() / "app.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = lock_path.open("a+")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            handle.close()
+            raise RuntimeError("已有 DP104 控制程序运行，请先退出旧程序。") from exc
+        return handle
     if os.name != "nt":
         return None
     kernel = ctypes.windll.kernel32
@@ -92,17 +106,12 @@ class AutoWorker:
             keys = 0
         if keys > 0:
             fired = self.milestones.sync(keys)
-            if fired and not self.device.uploading:
+            if fired and self.milestones.enabled and not self.device.uploading:
                 self.updates.put(("milestone", fired))
 
     def _keys(self):
         snapshot = self.device.metrics.snapshot()
         return int(snapshot.get("keys_today", 0))
-
-
-def data_dir() -> Path:
-    base = Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
-    return base / "DP104Studio"
 
 
 class Studio:
@@ -121,7 +130,8 @@ class Studio:
         self.updates = queue.Queue()
         self.metrics = TypingMetrics(data_dir() / "typing.json")
         self.device = DeviceWorker(self.metrics, self.updates)
-        self.milestones = Milestones(data_dir() / "milestone.json")
+        self.milestones = Milestones(data_dir() / "milestone.json",
+                                     enabled=sys.platform != "darwin")
         self.auto = AutoWorker(self.device, self.milestones, self.updates)
         self.ai_settings_path = data_dir() / "ai.json"
         ai = ai_designer.load_settings(self.ai_settings_path)
@@ -148,8 +158,10 @@ class Studio:
         self._start_tray()
         if self.start_in_tray:
             self.root.after(200, self._finish_startup_tray)
-        self.device.start()
-        self.auto.start()
+        self.no_device = os.environ.get("DP104_STUDIO_NO_DEVICE") == "1"
+        if not self.no_device:
+            self.device.start()
+            self.auto.start()
         self.root.after(150, self._refresh_timer)
         self.root.after(round(1000 / self.preview_fps), self.animate_preview)
         if os.environ.get("DP104_STUDIO_SMOKE") == "1":
@@ -231,15 +243,21 @@ class Studio:
         self.keyboard_label.pack(anchor="w", pady=(7, 2))
         self.serial_label = label(connection, "USB 串口：探测中", 11, MUTED)
         self.serial_label.pack(anchor="w")
-        self.connection_tip = label(connection, "端口由设备序列号自动配对，不用手填 COM 号。", 9, MUTED,
+        port_tip = ("自动识别 DP104 的 /dev/cu.* 端口，无需手动选择。" if sys.platform == "darwin"
+                    else "端口由设备序列号自动配对，不用手填 COM 号。")
+        self.connection_tip = label(connection, port_tip, 9, MUTED,
                                     wraplength=330, justify="left")
         self.connection_tip.pack(anchor="w", pady=(4, 9))
         recovery = tk.Frame(connection, bg=PAPER)
         recovery.pack(anchor="w")
         button(recovery, "重新探测", lambda: self.device.send("probe_serial", None), tone="mint", pady=6).pack(side="left", padx=(0, 7))
-        button(recovery, "重启键盘 USB", self.restart_usb, tone="yellow", pady=6).pack(side="left")
-        label(connection, "USB 重启需管理员确认，键盘将短暂断开。", 9, MUTED,
-              wraplength=330, justify="left").pack(anchor="w", pady=(5, 8))
+        if os.name == "nt":
+            button(recovery, "重启键盘 USB", self.restart_usb, tone="yellow", pady=6).pack(side="left")
+        else:
+            label(recovery, "串口无响应时，退出控制程序后重新插拔 USB。", 9, MUTED).pack(side="left")
+        if os.name == "nt":
+            label(connection, "USB 重启需管理员确认，键盘将短暂断开。", 9, MUTED,
+                  wraplength=330, justify="left").pack(anchor="w", pady=(5, 8))
 
         presets = panel(page, "★  小屋工坊", 0, 1, columnspan=2, padx=17, pady=8)
         gallery_header = tk.Frame(presets, bg=PAPER)
@@ -1048,7 +1066,10 @@ class Studio:
     def open_data_dir(self):
         folder = data_dir()
         folder.mkdir(parents=True, exist_ok=True)
-        os.startfile(folder)  # noqa: S606 - user requested local folder
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(folder)])
+        else:
+            os.startfile(folder)  # noqa: S606 - user requested local folder
 
     def _load_scenes(self):
         config = scheduler.load(self.auto.schedule_path)
@@ -1119,16 +1140,27 @@ class Studio:
             pystray.MenuItem("退出程序", lambda icon, item: self.updates.put(("exit", None))))
         self.tray = pystray.Icon("DP104PixelCottage", image, "DP104 像素小屋", menu)
 
+        def setup(icon):
+            icon.visible = True
+            self.tray_ready.set()
+
         def run_tray():
             try:
-                def setup(icon):
-                    icon.visible = True
-                    self.tray_ready.set()
                 self.tray.run(setup=setup)
             except Exception as exc:
                 self.tray_error = str(exc)
                 self.updates.put(("tray_error", self.tray_error))
-        threading.Thread(target=run_tray, name="dp104-tray", daemon=True).start()
+        if sys.platform == "darwin":
+            # Cocoa and Tk share the main event loop on macOS. pystray.run()
+            # from a background thread fails on Darwin; run_detached() lets
+            # Tk own that loop instead.
+            try:
+                self.tray.run_detached(setup=setup)
+            except Exception as exc:
+                self.tray_error = str(exc)
+                self.updates.put(("tray_error", self.tray_error))
+        else:
+            threading.Thread(target=run_tray, name="dp104-tray", daemon=True).start()
 
     def _finish_startup_tray(self):
         if self.tray_ready.is_set():
@@ -1147,7 +1179,8 @@ class Studio:
             self.startup_enabled.set(not enabled)
             self.notice = f"修改开机启动失败：{exc}"
             return
-        self.notice = "已开启开机启动；登录 Windows 后自动进入托盘" if enabled else "已关闭开机启动"
+        self.notice = ("已开启开机启动；下次登录后自动进入菜单栏" if sys.platform == "darwin"
+                       else "已开启开机启动；登录 Windows 后自动进入托盘") if enabled else "已关闭开机启动"
 
     def on_minimize(self, event):
         if event.widget is self.root:
@@ -1264,9 +1297,14 @@ class Studio:
         else:
             self.keyboard_label.config(text=f"DP104 已连接 · {MODES.get(self.mode, '未知模式')}")
             if serial_ok:
-                text, color = f"● {port} 可写", MINT
-                self.serial_label.config(text=f"USB 串口：{port} · 可以上传")
-                self.home_device_label.config(text=f"DP104 已连接 · {port} 可上传")
+                if self.device_state.get("serial_verified") is False:
+                    text, color = f"● {port} 已发现", MINT
+                    self.serial_label.config(text=f"USB 串口：{port} · 上传时验证")
+                    self.home_device_label.config(text="DP104 已连接 · 串口待上传验证")
+                else:
+                    text, color = f"● {port} 可写", MINT
+                    self.serial_label.config(text=f"USB 串口：{port} · 可以上传")
+                    self.home_device_label.config(text=f"DP104 已连接 · {port} 可上传")
             else:
                 reason = self.device_state.get("serial_error") or "不可用"
                 text, color = f"● {port or '串口'} {reason}", YELLOW
@@ -1400,8 +1438,9 @@ class Studio:
         if self.closing:
             return
         self.closing = True
-        self.device.stop()
-        self.auto.stop()
+        if not self.no_device:
+            self.device.stop()
+            self.auto.stop()
         try:
             self.metrics.save()
         except OSError:
@@ -1410,6 +1449,8 @@ class Studio:
             self.tray.stop()
         if self.mutex and os.name == "nt":
             ctypes.windll.kernel32.CloseHandle(self.mutex)
+        elif self.mutex:
+            self.mutex.close()
         self.root.destroy()
 
     def run(self):

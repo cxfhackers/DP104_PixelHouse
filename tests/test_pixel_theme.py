@@ -2,6 +2,7 @@
 
 import os
 import runpy
+import sys
 import tkinter as tk
 import unittest
 from pathlib import Path
@@ -11,7 +12,7 @@ from studio.pixel_theme import PixelDropdown
 from studio import startup
 
 
-@unittest.skipUnless(os.name == "nt", "Tk desktop interaction requires Windows")
+@unittest.skipUnless(os.name == "nt" or sys.platform == "darwin", "Tk desktop interaction requires macOS or Windows")
 class PixelDropdownTests(unittest.TestCase):
     def setUp(self):
         self.root = tk.Tk()
