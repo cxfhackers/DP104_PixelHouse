@@ -4,7 +4,7 @@
 
 ## macOS 运行
 
-Apple Silicon Mac 可从 [macOS 预览版](https://github.com/cxfhackers/DP104-Studio-mac/releases/tag/mac-preview-1) 下载 `.app` 压缩包，解压后运行。该包未经过 Apple 公证；首次打开时可能需要在 Finder 中右键选择「打开」。也可以按以下步骤从源码运行：
+Apple Silicon Mac 可从 [macOS 预览版](https://github.com/cxfhackers/DP104_PixelHouse/releases/tag/mac-preview-1) 下载 `.app` 压缩包，解压后运行。该包未经过 Apple 公证；首次打开时可能需要在 Finder 中右键选择「打开」。也可以按以下步骤从源码运行：
 
 1. 安装 Python 3.11+ 及对应的 Tk。Homebrew 示例：`brew install python@3.12 python-tk@3.12`。
 2. 先退出其他 DP104 控制程序，再用 USB 连接键盘；仅蓝牙连接时 HID/CDC 功能不可用。
