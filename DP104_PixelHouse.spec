@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='DP104-Studio',
+    name='DP104_PixelHouse',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

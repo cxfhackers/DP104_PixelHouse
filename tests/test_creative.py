@@ -6,10 +6,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from studio.image_import import (_sample_indices, _timed_indices, image_to_frame,
+from pixelhouse.image_import import (_sample_indices, _timed_indices, image_to_frame,
                                  import_images, import_tabml, rgb_hex_to_hsv_pixel)
-from studio.pets import SCENES, make_scene
-from studio.transitions import tween_frames
+from pixelhouse.pets import SCENES, make_scene
+from pixelhouse.transitions import tween_frames
 
 
 class CreativeTests(unittest.TestCase):

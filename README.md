@@ -1,24 +1,24 @@
-# DP104 像素小屋
+# DP104_PixelHouse
 
-适用于 macOS 和 Windows 的 DP104（TICKTYPE EVO 104）键盘控制台。像素游戏风格的 Tk 界面，含点阵工坊、今日总览与小屋设置三个页面。独立运行，不改官方固件。本仓库基于 [Panda-995/DP104-Studio](https://github.com/Panda-995/DP104-Studio) 改造，保留原项目 AGPL-3.0 许可证。
+适用于 macOS 和 Windows 的 DP104（TICKTYPE EVO 104）键盘控制台。像素游戏风格的 Tk 界面，含点阵工坊、今日总览与小屋设置三个页面。独立运行，不改官方固件。本项目在 [Panda-995](https://github.com/Panda-995) 的 DP104 项目基础上开发，保留原项目 AGPL-3.0 许可证和 Git 历史。
 
 ## macOS 运行
 
-Apple Silicon Mac 可从 [macOS 预览版](https://github.com/cxfhackers/DP104_PixelHouse/releases/tag/mac-preview-1) 下载 `.app` 压缩包，解压后运行。该包未经过 Apple 公证；首次打开时可能需要在 Finder 中右键选择「打开」。也可以按以下步骤从源码运行：
+Apple Silicon Mac 可从 [macOS 预览版](https://github.com/cxfhackers/DP104_PixelHouse/releases/tag/pixelhouse-preview-1) 下载 `.app` 压缩包，解压后运行。该包未经过 Apple 公证；首次打开时可能需要在 Finder 中右键选择「打开」。也可以按以下步骤从源码运行：
 
 1. 安装 Python 3.11+ 及对应的 Tk。Homebrew 示例：`brew install python@3.12 python-tk@3.12`。
 2. 先退出其他 DP104 控制程序，再用 USB 连接键盘；仅蓝牙连接时 HID/CDC 功能不可用。
 3. 在终端运行 `./start.command`，或双击 `start.command`。首次启动会创建 `.venv` 并安装依赖；若双击提示无执行权限，先运行 `chmod +x start.command`。
 4. 关闭或最小化窗口后程序留在菜单栏，点击图标可重新打开或退出。在「小屋设置 → 数据」开启登录启动后，下次登录会自动进入菜单栏。
 
-macOS 数据和预设保存在 `~/Library/Application Support/DP104Studio/`。启动时仅枚举 USB CDC 端口，不会为探测端口而发送串口命令；只有用户主动上传时才打开串口。macOS 版默认关闭自动打字里程碑上传，可在设置中手动开启。程序不修改键盘固件；macOS 不提供软件内 USB 重启，遇到串口超时请先退出程序再重新插拔键盘。当前适配已在 Mac 上完成界面和模拟设备验证；真实 DP104 的 HID/CDC 读写仍需实机验收。
+macOS 数据和预设保存在 `~/Library/Application Support/DP104_PixelHouse/`。从旧预览版升级时，如需保留设置和预设，请先通过旧版界面打开数据目录，再将文件复制到新目录；若旧版开启了登录启动，也请先在旧版设置中关闭。启动时仅枚举 USB CDC 端口，不会为探测端口而发送串口命令；只有用户主动上传时才打开串口。macOS 版默认关闭自动打字里程碑上传，可在设置中手动开启。程序不修改键盘固件；macOS 不提供软件内 USB 重启，遇到串口超时请退出程序再重新插拔键盘。当前适配已在 Mac 上完成界面和模拟设备验证；真实 DP104 的 HID/CDC 读写仍需实机验收。
 
-调试界面但不访问设备：`DP104_STUDIO_NO_DEVICE=1 ./start.command`。
+调试界面但不访问设备：`DP104_PIXELHOUSE_NO_DEVICE=1 ./start.command`。
 
 ## Windows 运行
 
 1. 先退出其他 DP104 控制程序。键盘用 USB 连接电脑；仅蓝牙连接时 VIA HID/USB CDC 功能不可用。
-2. 双击 `dist\DP104-Studio.exe`（无需安装 Python），或运行 `start.bat` 从源码启动（需 Python 3.11+）。
+2. 双击 `dist\DP104_PixelHouse.exe`（无需安装 Python），或运行 `start.bat` 从源码启动（需 Python 3.11+）。
 3. 关闭或最小化窗口后程序留在通知区域；双击托盘图标重新打开，右键选择“退出程序”，也可用窗口底部的“退出程序”按钮。
 4. 在「小屋设置 → 数据」打开「开机启动 · 进入托盘」，Windows 登录后会自动在后台启动；此开关只修改当前用户的登录启动项，可随时关闭。
 
@@ -32,7 +32,7 @@ macOS 数据和预设保存在 `~/Library/Application Support/DP104Studio/`。�
 - **图片导入**：导入 GIF、APNG、动画 WebP、普通图片、官方 `.tabml` 文件和按文件名排序的图片序列。可选择完整显示、居中裁切或拉伸；透明区域变为熄灭灯珠。GIF 按原始帧时长采样成固定帧率，超长素材限制为 200 帧；导入后先预览，可继续逐灯珠修改。
 - **像素宠物与小剧场**：兔兔跳跳/晚安、小猫追球/眨眼、幽灵飘飘/捉迷藏，六段循环动画。点击先预览，再选择编辑、保存或上传。
 - **官方样例帧数与上限**：`.tabml` 是 32 字节头部加每帧 576 字节 RGB 数据。头部前 5 字节为 `tabml`，后面依次是帧数、帧率、8 行、24 列。吃豆人 52 帧/10 fps（25 张不同画面），小人退散 33 帧/5 fps（23 张不同画面），猫爪 21 帧/5 fps（14 张不同画面）；重复帧承担停留时间。之前的 32 帧是本程序自设限制。DP104 [官方网页驱动](https://cfg.ticktype.com/)未单独设置 `maxFrame`，其点阵功能默认限制 200 帧；本机已上传 200 帧火焰，2200 个分片全部获确认，用户确认 DIY 屏持续变化并循环。因此当前程序上限设为 200 帧。格式与串口帧数字段都只有 1 字节，可表示 255 帧，但 255 不是官方支持值，也未实测。
-- **我的预设**：用户预设库（Windows：`%LOCALAPPDATA%\DP104Studio\presets\*.json`；macOS：`~/Library/Application Support/DP104Studio/presets/*.json`）。可保存当前预览、重命名、删除、导入/导出分享文件；右键预设弹出菜单。
+- **我的预设**：用户预设库（Windows：`%LOCALAPPDATA%\DP104_PixelHouse\presets\*.json`；macOS：`~/Library/Application Support/DP104_PixelHouse/presets/*.json`）。可保存当前预览、重命名、删除、导入/导出分享文件；右键预设弹出菜单。
 - **AI 工坊**：新提示词先分析主体、关键特征、动作顺序、运动方向和循环衔接。移动角色需绘制 6–8 张不同姿态，可加稀疏场景，再由程序逐灯珠展开为 64 帧；长景滚动需绘制 48–96 列；原地动画需提供 8–16 张分镜和每张的停留帧数，展开至少 32 帧。程序会拒绝只有一张静态精灵、姿态变化过少或没有实现要求的往返与跳跃动作的结果，并让模型重画一次。模型直接绘制的逐帧数据仍限制 32 张关键画面；可选「柔滑 2× / 3×」在已有画面间按亮度与颜色补帧，最多 200 帧、30 fps，并保持原播放速度。补帧不提高 8×24 的空间分辨率。生成后可在编辑器中继续修改。支持 Chat Completions 兼容接口的基础地址或完整接口地址；主体精度仍取决于所选模型和提示词。
 - **文本槽**：读写键盘的 5 个文本槽（各 30 字符 ASCII）。实测固件能存储小写但滚动屏幕不绘制小写，因此手动写入自动转大写；备份与恢复保留原文。
 - **灯光控制**：键位 RGB（通道 22，45 种效果）与底部灯条（通道 21，43 种效果）的亮度/效果/速度/颜色；修改后发送固件保存命令才会让实体灯刷新。DIY 画面亮度通过调整帧像素并重传实现。
@@ -68,21 +68,21 @@ macOS 数据和预设保存在 `~/Library/Application Support/DP104Studio/`。�
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-$env:DP104_STUDIO_SMOKE='1'; .\.venv\Scripts\python.exe app.pyw
+$env:DP104_PIXELHOUSE_SMOKE='1'; .\.venv\Scripts\python.exe app.pyw
 ```
 
-烟测会启动完整界面约 7 秒后自动退出。打包：`.\.venv\Scripts\pyinstaller.exe DP104-Studio.spec`。
+烟测会启动完整界面约 7 秒后自动退出。打包：`.\.venv\Scripts\pyinstaller.exe DP104_PixelHouse.spec`。
 
 macOS 验证及打包：
 
 ```sh
-DP104_STUDIO_NO_DEVICE=1 .venv/bin/python -m unittest discover -s tests -v
-DP104_STUDIO_NO_DEVICE=1 DP104_STUDIO_SMOKE=1 .venv/bin/python app.pyw
+DP104_PIXELHOUSE_NO_DEVICE=1 .venv/bin/python -m unittest discover -s tests -v
+DP104_PIXELHOUSE_NO_DEVICE=1 DP104_PIXELHOUSE_SMOKE=1 .venv/bin/python app.pyw
 .venv/bin/python -m pip install pyinstaller
-.venv/bin/pyinstaller --noconfirm DP104-Studio-mac.spec
+.venv/bin/pyinstaller --noconfirm DP104_PixelHouse-mac.spec
 ```
 
-打包结果为 `dist/DP104-Studio.app`。本地生成的应用未经 Apple Developer ID 签名或公证，分发到其他 Mac 时可能受 Gatekeeper 限制。
+打包结果为 `dist/DP104_PixelHouse.app`。本地生成的应用未经 Apple Developer ID 签名或公证，分发到其他 Mac 时可能受 Gatekeeper 限制。
 
 ## 隐私
 

@@ -17,6 +17,6 @@ start "" "%VENV%\Scripts\pythonw.exe" "%~dp0app.pyw"
 exit /b 0
 
 :setup_error
-echo DP104 Studio setup failed. Check Python and network access, then retry.
+echo DP104_PixelHouse setup failed. Check Python and network access, then retry.
 pause
 exit /b 1

@@ -8,8 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from studio import device, startup
-from studio.paths import data_dir
+from pixelhouse import device, startup
+from pixelhouse.paths import data_dir
 
 
 class MacSupportTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class MacSupportTests(unittest.TestCase):
                     "interface_number": -1, "serial_number": "ABC", "path": b"dp104"}
         other = {**keyboard, "usage": 0x62, "path": b"other"}
         with patch.object(device.sys, "platform", "darwin"), \
-             patch("studio.device.hid.enumerate", return_value=[other, keyboard]):
+             patch("pixelhouse.device.hid.enumerate", return_value=[other, keyboard]):
             self.assertIs(device.find_keyboard(), keyboard)
 
     def test_single_mac_serial_port_uses_callout_device(self):
@@ -26,17 +26,17 @@ class MacSupportTests(unittest.TestCase):
         port = SimpleNamespace(vid=device.VID, pid=device.PID,
                                serial_number="CDC-SERIAL", device="/dev/cu.usbmodem123")
         with patch.object(device.sys, "platform", "darwin"), \
-             patch("studio.device.list_ports.comports", return_value=[port]):
+             patch("pixelhouse.device.list_ports.comports", return_value=[port]):
             self.assertEqual(device.find_port(descriptor), port.device)
         with patch.object(device.sys, "platform", "darwin"), \
-             patch("studio.device.list_ports.comports", return_value=[port, port]):
+             patch("pixelhouse.device.list_ports.comports", return_value=[port, port]):
             self.assertIsNone(device.find_port(descriptor))
 
     def test_mac_discovery_never_probes_serial(self):
         worker = device.DeviceWorker(None, queue.Queue())
         with patch.object(device.sys, "platform", "darwin"), \
-             patch("studio.device.find_port", return_value="/dev/cu.usbmodem123"), \
-             patch("studio.device.probe_serial") as probe:
+             patch("pixelhouse.device.find_port", return_value="/dev/cu.usbmodem123"), \
+             patch("pixelhouse.device.probe_serial") as probe:
             state = worker._serial_state({"serial_number": "ABC"})
         probe.assert_not_called()
         self.assertTrue(state["serial"])
@@ -46,7 +46,7 @@ class MacSupportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "Library" / "LaunchAgents" / "agent.plist"
             with patch.object(startup.sys, "platform", "darwin"), \
-                 patch("studio.startup.mac_agent_path", return_value=path):
+                 patch("pixelhouse.startup.mac_agent_path", return_value=path):
                 startup.set_enabled(True)
                 self.assertTrue(startup.is_enabled())
                 data = plistlib.loads(path.read_bytes())
@@ -56,9 +56,9 @@ class MacSupportTests(unittest.TestCase):
                 self.assertFalse(path.exists())
 
     def test_mac_data_directory(self):
-        with patch("studio.paths.sys.platform", "darwin"), \
-             patch("studio.paths.Path.home", return_value=Path("/Users/example")):
-            self.assertEqual(data_dir(), Path("/Users/example/Library/Application Support/DP104Studio"))
+        with patch("pixelhouse.paths.sys.platform", "darwin"), \
+             patch("pixelhouse.paths.Path.home", return_value=Path("/Users/example")):
+            self.assertEqual(data_dir(), Path("/Users/example/Library/Application Support/DP104_PixelHouse"))
 
 
 if __name__ == "__main__":

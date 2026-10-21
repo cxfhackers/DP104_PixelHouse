@@ -18,7 +18,7 @@ exe = EXE(
     app.scripts,
     [],
     exclude_binaries=True,
-    name='DP104-Studio',
+    name='DP104_PixelHouse',
     console=False,
     target_arch=None,
 )
@@ -28,11 +28,11 @@ bundle_files = COLLECT(
     app.datas,
     strip=False,
     upx=False,
-    name='DP104-Studio',
+    name='DP104_PixelHouse',
 )
 app_bundle = BUNDLE(
     bundle_files,
-    name='DP104-Studio.app',
-    bundle_identifier='com.cxfhackers.dp104studio',
+    name='DP104_PixelHouse.app',
+    bundle_identifier='com.cxfhackers.dp104pixelhouse',
     info_plist={'NSHighResolutionCapable': True},
 )

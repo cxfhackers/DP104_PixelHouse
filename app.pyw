@@ -1,4 +1,4 @@
-"""DP104 Studio — a small pixel cottage for the DP104 keyboard."""
+"""DP104_PixelHouse — a small pixel house for the DP104 keyboard."""
 
 from __future__ import annotations
 
@@ -18,20 +18,20 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw
 import pystray
 
-from studio import ai_designer, image_import, lights, pets, presetlib, scheduler, startup, transitions
-from studio.device import DeviceWorker, MODES
-from studio.editor import PixelEditor
-from studio.effects import COLS, EFFECTS, MAX_FRAMES, ROWS, dim_frames, make_frames
-from studio.metrics import TypingMetrics
-from studio.keymap import KEYS as PHYSICAL_KEYS, KEY_BY_MATRIX, heat_color
-from studio.milestones import Milestones
-from studio.paths import data_dir
-from studio.pixel_theme import (BG, BLUE, CAT, FONT, INK, LILAC, MINT, MUTED,
+from pixelhouse import ai_designer, image_import, lights, pets, presetlib, scheduler, startup, transitions
+from pixelhouse.device import DeviceWorker, MODES
+from pixelhouse.editor import PixelEditor
+from pixelhouse.effects import COLS, EFFECTS, MAX_FRAMES, ROWS, dim_frames, make_frames
+from pixelhouse.metrics import TypingMetrics
+from pixelhouse.keymap import KEYS as PHYSICAL_KEYS, KEY_BY_MATRIX, heat_color
+from pixelhouse.milestones import Milestones
+from pixelhouse.paths import data_dir
+from pixelhouse.pixel_theme import (BG, BLUE, CAT, FONT, INK, LILAC, MINT, MUTED,
                                 PAPER, PINK, PIXEL_FONT, YELLOW, PixelDropdown,
                                 ask_color, ask_confirm, ask_text, button,
                                 draw_cat, draw_frame, label, panel,
                                 pixel_entry, pixel_scale, pixel_toggle)
-from studio.presets import make_milestone_frames
+from pixelhouse.presets import make_milestone_frames
 
 
 def acquire_mutex():
@@ -114,11 +114,11 @@ class AutoWorker:
         return int(snapshot.get("keys_today", 0))
 
 
-class Studio:
+class PixelHouse:
     def __init__(self, mutex):
         self.mutex = mutex
         self.root = tk.Tk()
-        self.root.title("DP104 像素小屋")
+        self.root.title("DP104_PixelHouse")
         self.root.geometry("1190x900")
         self.root.minsize(1060, 840)
         self.root.configure(bg=BG)
@@ -158,13 +158,13 @@ class Studio:
         self._start_tray()
         if self.start_in_tray:
             self.root.after(200, self._finish_startup_tray)
-        self.no_device = os.environ.get("DP104_STUDIO_NO_DEVICE") == "1"
+        self.no_device = os.environ.get("DP104_PIXELHOUSE_NO_DEVICE") == "1"
         if not self.no_device:
             self.device.start()
             self.auto.start()
         self.root.after(150, self._refresh_timer)
         self.root.after(round(1000 / self.preview_fps), self.animate_preview)
-        if os.environ.get("DP104_STUDIO_SMOKE") == "1":
+        if os.environ.get("DP104_PIXELHOUSE_SMOKE") == "1":
             self.root.after(7000, self.close)
 
     # ---------------------------------------------------------------- UI 框架
@@ -176,7 +176,7 @@ class Studio:
         draw_cat(mascot, 5)
         heading = tk.Frame(header, bg=INK)
         heading.pack(side="left", fill="y")
-        tk.Label(heading, text="DP104  像素小屋", bg=INK, fg=PAPER,
+        tk.Label(heading, text="DP104_PixelHouse", bg=INK, fg=PAPER,
                  font=(FONT, 20, "bold")).pack(anchor="w", pady=(2, 0))
         tk.Label(heading, text="PIXEL COTTAGE  /  键盘的秘密基地", bg=INK, fg=YELLOW,
                  font=(PIXEL_FONT, 10, "bold")).pack(anchor="w")
@@ -1136,9 +1136,9 @@ class Studio:
                     color = PINK if char == "P" else (PAPER if char == "W" else INK)
                     drawing.rectangle((x*4, y*4+5, x*4+3, y*4+8), fill=color)
         menu = pystray.Menu(
-            pystray.MenuItem("打开像素小屋", lambda icon, item: self.updates.put(("open", None)), default=True),
+            pystray.MenuItem("打开 DP104_PixelHouse", lambda icon, item: self.updates.put(("open", None)), default=True),
             pystray.MenuItem("退出程序", lambda icon, item: self.updates.put(("exit", None))))
-        self.tray = pystray.Icon("DP104PixelCottage", image, "DP104 像素小屋", menu)
+        self.tray = pystray.Icon("DP104_PixelHouse", image, "DP104_PixelHouse", menu)
 
         def setup(icon):
             icon.visible = True
@@ -1200,7 +1200,7 @@ class Studio:
         if not self.tray_hint_shown:
             self.tray_hint_shown = True
             try:
-                self.tray.notify("窗口已收进通知区域，双击图标可重新打开。", "DP104 像素小屋")
+                self.tray.notify("窗口已收进通知区域，双击图标可重新打开。", "DP104_PixelHouse")
             except Exception:
                 pass
 
@@ -1464,6 +1464,6 @@ def ttk_combobox(parent, values, width):
 if __name__ == "__main__":
     try:
         lock = acquire_mutex()
-        Studio(lock).run()
+        PixelHouse(lock).run()
     except Exception as exc:
-        messagebox.showerror("DP104 像素小屋", str(exc))
+        messagebox.showerror("DP104_PixelHouse", str(exc))

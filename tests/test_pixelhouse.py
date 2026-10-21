@@ -7,18 +7,18 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import requests
 
-from studio import ai_designer, lights, presetlib, scheduler
-from studio.device import (find_keyboard, find_port, hid_command, save_light_channel,
+from pixelhouse import ai_designer, lights, presetlib, scheduler
+from pixelhouse.device import (find_keyboard, find_port, hid_command, save_light_channel,
                            send_animation, set_light_value, upload_animation)
-from studio.effects import EFFECTS, dim_frames, make_frames
-from studio.metrics import TypingMetrics
-from studio.keymap import KEYS as PHYSICAL_KEYS, KEY_BY_MATRIX, heat_color
-from studio.milestones import Milestones
-from studio.presets import make_milestone_frames, render_text
-from studio.textslots import encode_slot, read_slot, segments, write_slot
+from pixelhouse.effects import EFFECTS, dim_frames, make_frames
+from pixelhouse.metrics import TypingMetrics
+from pixelhouse.keymap import KEYS as PHYSICAL_KEYS, KEY_BY_MATRIX, heat_color
+from pixelhouse.milestones import Milestones
+from pixelhouse.presets import make_milestone_frames, render_text
+from pixelhouse.textslots import encode_slot, read_slot, segments, write_slot
 
 
-class StudioTests(unittest.TestCase):
+class PixelHouseTests(unittest.TestCase):
     def test_ai_url_normalizes_pasted_newline_and_accepts_full_endpoint(self):
         base = "https://api2.laozhang.ai\n/v1"
         self.assertEqual(ai_designer.chat_url(base),
@@ -32,7 +32,7 @@ class StudioTests(unittest.TestCase):
         reply = SimpleNamespace(ok=True, status_code=200, json=lambda: {
             "choices": [{"message": {"content": "成功"}}]})
         settings = {"base_url": "https://example.com/v1", "api_key": "test-key", "model": "glm-5.1"}
-        with patch("studio.ai_designer.requests.post", return_value=reply) as post:
+        with patch("pixelhouse.ai_designer.requests.post", return_value=reply) as post:
             self.assertEqual(ai_designer.test_connection(settings), "成功")
         self.assertEqual(post.call_args.args[0], "https://example.com/v1/chat/completions")
         self.assertEqual(set(post.call_args.kwargs["json"]), {"model", "messages", "max_tokens"})
@@ -43,7 +43,7 @@ class StudioTests(unittest.TestCase):
         reply = SimpleNamespace(ok=True, status_code=200, json=lambda: {
             "choices": [{"message": {"content": "成功"}}]})
         settings = {"base_url": "https://example.com/v1", "api_key": "", "model": "test"}
-        with patch("studio.ai_designer.requests.post",
+        with patch("pixelhouse.ai_designer.requests.post",
                    side_effect=[requests.ConnectionError("direct unavailable"), reply]) as post:
             self.assertEqual(ai_designer.test_connection(settings), "成功")
         self.assertEqual(post.call_count, 2)
@@ -61,7 +61,7 @@ class StudioTests(unittest.TestCase):
                                         for part in chunks] + [b"data: [DONE]"]),
                                    close=lambda: None)
         settings = {"base_url": "https://example.com/v1", "api_key": "", "model": "model"}
-        with patch("studio.ai_designer.requests.post", return_value=response) as post:
+        with patch("pixelhouse.ai_designer.requests.post", return_value=response) as post:
             streamed = ai_designer._chat(settings, [{"role": "user", "content": "pink heart"}], 30, 900,
                                          stream=True)
         self.assertEqual(streamed, text)
@@ -156,7 +156,7 @@ class StudioTests(unittest.TestCase):
                                "frames": [["." * index + "A" + "." * (23 - index)] * 8
                                           for index in range(8)], "holds": [4] * 8})
         settings = {"base_url": "https://example.com/v1", "api_key": "", "model": "test"}
-        with patch("studio.ai_designer._chat", side_effect=[static, animated]) as chat:
+        with patch("pixelhouse.ai_designer._chat", side_effect=[static, animated]) as chat:
             fps, frames = ai_designer.generate(settings, "moving heart")
         self.assertEqual((fps, len(frames)), (8, 32))
         self.assertEqual(chat.call_count, 2)
@@ -164,7 +164,7 @@ class StudioTests(unittest.TestCase):
 
     def test_light_set_skips_unchanged_firmware_value(self):
         current = bytes([8, lights.KEYS, 1, 248])
-        with patch("studio.device.hid_command", return_value=current) as command:
+        with patch("pixelhouse.device.hid_command", return_value=current) as command:
             self.assertEqual(set_light_value(None, lights.KEYS, 1, (248,)), (current, False))
         command.assert_called_once_with(None, [8, lights.KEYS, 1])
 
@@ -172,28 +172,28 @@ class StudioTests(unittest.TestCase):
         initial = bytes([8, lights.KEYS, 1, 248])
         ack = bytes([7, lights.KEYS, 1, 200])
         updated = bytes([8, lights.KEYS, 1, 200])
-        with patch("studio.device.hid_command", side_effect=[initial, ack, updated]) as command:
+        with patch("pixelhouse.device.hid_command", side_effect=[initial, ack, updated]) as command:
             self.assertEqual(set_light_value(None, lights.KEYS, 1, (200,)), (updated, True))
         self.assertEqual([call.args[1] for call in command.call_args_list],
                          [[8, lights.KEYS, 1], [7, lights.KEYS, 1, 200], [8, lights.KEYS, 1]])
 
     def test_light_save_commits_the_channel(self):
-        with patch("studio.device.hid_command", return_value=bytes([9, lights.KEYS])) as command:
+        with patch("pixelhouse.device.hid_command", return_value=bytes([9, lights.KEYS])) as command:
             save_light_channel(None, lights.KEYS)
         command.assert_called_once_with(None, [9, lights.KEYS], timeout=0.6)
 
     def test_light_readback_accepts_worker_color_and_waits_for_initial_values(self):
-        studio = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"),
-                                run_name="dp104_test")["Studio"]
+        pixelhouse = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"),
+                                run_name="dp104_test")["PixelHouse"]
         ui = SimpleNamespace(light_widgets={"keys": {"color": "#000000"}},
                              device_state={"connected": True},
                              lights_loaded={"keys": False}, notice="")
-        studio._sync_color(ui, "keys", [120, 200])
+        pixelhouse._sync_color(ui, "keys", [120, 200])
         self.assertNotEqual(ui.light_widgets["keys"]["color"], "#000000")
         self.assertEqual(ui.light_widgets["keys"]["color_hsv"], (120, 200))
         calls = []
         ui.read_lights = lambda: calls.append("read")
-        studio.apply_lights(ui, "keys")
+        pixelhouse.apply_lights(ui, "keys")
         self.assertEqual(calls, ["read"])
         self.assertIn("读取", ui.notice)
         ui.lights_loaded["keys"] = True
@@ -203,7 +203,7 @@ class StudioTests(unittest.TestCase):
             "effect": SimpleNamespace(get=lambda: lights.effect_options("keys")[6]),
             "speed": SimpleNamespace(get=lambda: 80),
         })
-        studio.apply_lights(ui, "keys")
+        pixelhouse.apply_lights(ui, "keys")
         applied = [item[1] for item in calls if isinstance(item, tuple) and item[0] == "light_apply"]
         self.assertEqual(len(applied), 1)
         self.assertEqual(applied[0][0:2], ("keys", lights.KEYS))
@@ -211,8 +211,8 @@ class StudioTests(unittest.TestCase):
         self.assertIn((4, (120, 200)), applied[0][2])
 
     def test_manual_text_slot_uppercases_firmware_invisible_lowercase(self):
-        studio = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"),
-                                run_name="dp104_text_test")["Studio"]
+        pixelhouse = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"),
+                                run_name="dp104_text_test")["PixelHouse"]
 
         class Entry:
             value = "aBc 123"
@@ -229,7 +229,7 @@ class StudioTests(unittest.TestCase):
         calls = []
         ui = SimpleNamespace(text_entry=Entry(), slot_index=1, notice="",
                              device=SimpleNamespace(send=lambda *args: calls.append(args)))
-        studio.write_slot_text(ui)
+        pixelhouse.write_slot_text(ui)
         self.assertEqual(ui.text_entry.value, "ABC 123")
         self.assertEqual(calls, [("text_write", (1, "ABC 123"))])
 
@@ -444,8 +444,8 @@ class StudioTests(unittest.TestCase):
         ports = [SimpleNamespace(vid=0xE560, pid=0xE104, serial_number="OTHER", device="COM4"),
                  SimpleNamespace(vid=0xE560, pid=0xE104,
                                  serial_number="F576C7BF_C93C817", device="COM5")]
-        with patch("studio.device.hid.enumerate", return_value=[descriptor]), \
-             patch("studio.device.list_ports.comports", return_value=ports):
+        with patch("pixelhouse.device.hid.enumerate", return_value=[descriptor]), \
+             patch("pixelhouse.device.list_ports.comports", return_value=ports):
             self.assertIs(find_keyboard(), descriptor)
             self.assertEqual(find_port(descriptor), "COM5")
 
@@ -493,7 +493,7 @@ class StudioTests(unittest.TestCase):
                 return self.replies.pop(0) if self.replies else b""
 
         fake = FakeSerial()
-        with patch("studio.device.serial.Serial", return_value=fake):
+        with patch("pixelhouse.device.serial.Serial", return_value=fake):
             with self.assertRaises(RuntimeError):
                 upload_animation("COM5", [bytes(576)])
         self.assertEqual([packet[0] for packet in fake.writes], [0xC0, 0xC1, 0xE2])
@@ -510,9 +510,9 @@ class StudioTests(unittest.TestCase):
             events.append("upload")
             return {"frames": 1, "chunks": 11, "acknowledged": True}
 
-        with patch("studio.device.hid_command", side_effect=command), \
-             patch("studio.device.upload_animation", side_effect=upload), \
-             patch("studio.device.time.sleep"):
+        with patch("pixelhouse.device.hid_command", side_effect=command), \
+             patch("pixelhouse.device.upload_animation", side_effect=upload), \
+             patch("pixelhouse.device.time.sleep"):
             send_animation(object(), "COM5", [bytes(576)])
         self.assertEqual(events, [(8, 26, 2), (7, 26, 2, 2), "upload", (8, 26, 2)])
 
@@ -527,8 +527,8 @@ class StudioTests(unittest.TestCase):
             events.append("upload")
             return {"frames": 1, "chunks": 11, "acknowledged": True}
 
-        with patch("studio.device.hid_command", side_effect=command), \
-             patch("studio.device.upload_animation", side_effect=upload):
+        with patch("pixelhouse.device.hid_command", side_effect=command), \
+             patch("pixelhouse.device.upload_animation", side_effect=upload):
             send_animation(object(), "COM5", [bytes(576)])
         self.assertEqual(events, [(8, 26, 2), "upload", (8, 26, 2)])
 

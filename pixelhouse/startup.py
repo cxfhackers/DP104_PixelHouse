@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-VALUE_NAME = "DP104Studio"
-MAC_LABEL = "com.dp104studio.tray"
+VALUE_NAME = "DP104_PixelHouse"
+MAC_LABEL = "com.dp104pixelhouse.tray"
 
 
 def mac_agent_path() -> Path:

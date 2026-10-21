@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from studio.pixel_theme import PixelDropdown
-from studio import startup
+from pixelhouse.pixel_theme import PixelDropdown
+from pixelhouse import startup
 
 
 @unittest.skipUnless(os.name == "nt" or sys.platform == "darwin", "Tk desktop interaction requires macOS or Windows")
@@ -45,11 +45,11 @@ class PixelDropdownTests(unittest.TestCase):
         self.assertIsNone(self.dropdown.popup)
 
     def test_home_page_arrow_cannot_reopen_lights_menu(self):
-        Studio = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"))["Studio"]
-        with patch.object(Studio, "_start_tray"), \
-             patch.object(Studio.__init__.__globals__["DeviceWorker"], "start"), \
-             patch.object(Studio.__init__.__globals__["AutoWorker"], "start"):
-            app = Studio(None)
+        PixelHouse = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"))["PixelHouse"]
+        with patch.object(PixelHouse, "_start_tray"), \
+             patch.object(PixelHouse.__init__.__globals__["DeviceWorker"], "start"), \
+             patch.object(PixelHouse.__init__.__globals__["AutoWorker"], "start"):
+            app = PixelHouse(None)
         try:
             app.change_preset_tab("lights")
             app.root.update()
@@ -66,12 +66,12 @@ class PixelDropdownTests(unittest.TestCase):
             app.root.destroy()
 
     def test_tray_startup_starts_withdrawn(self):
-        Studio = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"))["Studio"]
+        PixelHouse = runpy.run_path(str(Path(__file__).resolve().parents[1] / "app.pyw"))["PixelHouse"]
         with patch("sys.argv", ["app.pyw", "--tray"]), \
-             patch.object(Studio, "_start_tray"), \
-             patch.object(Studio.__init__.__globals__["DeviceWorker"], "start"), \
-             patch.object(Studio.__init__.__globals__["AutoWorker"], "start"):
-            app = Studio(None)
+             patch.object(PixelHouse, "_start_tray"), \
+             patch.object(PixelHouse.__init__.__globals__["DeviceWorker"], "start"), \
+             patch.object(PixelHouse.__init__.__globals__["AutoWorker"], "start"):
+            app = PixelHouse(None)
         try:
             self.assertEqual(app.root.state(), "withdrawn")
             self.assertTrue(app.start_in_tray)
@@ -81,7 +81,7 @@ class PixelDropdownTests(unittest.TestCase):
             app.root.destroy()
 
     def test_packaged_startup_command_uses_current_exe(self):
-        path = Path("C:/Program Files/DP104/DP104-Studio.exe")
+        path = Path("C:/Program Files/DP104/DP104_PixelHouse.exe")
         with patch.object(startup.sys, "frozen", True, create=True):
             command = startup.command_for_app(path)
         self.assertEqual(command, f'"{path.resolve()}" --tray')
