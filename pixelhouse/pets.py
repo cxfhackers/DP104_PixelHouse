@@ -8,6 +8,7 @@ from .effects import COLS, ROWS
 from .image_import import rgb_hex_to_hsv_pixel
 
 SCENES = (
+    ("霓虹小猫", "粉蓝小猫与闪烁爱心", 8, 16),
     ("兔兔跳跳", "兔子左右跳跃", 8, 24),
     ("兔兔晚安", "睡着的兔子与月亮", 6, 12),
     ("小猫追球", "小猫追着彩球跑", 8, 24),
@@ -24,6 +25,8 @@ _PALETTE = {
     "Y": rgb_hex_to_hsv_pixel("#ffda73"),
     "C": rgb_hex_to_hsv_pixel("#85e7e4"),
     "B": rgb_hex_to_hsv_pixel("#8cb8ff"),
+    "M": rgb_hex_to_hsv_pixel("#ff62da"),
+    "N": rgb_hex_to_hsv_pixel("#56ebff"),
 }
 
 _RABBIT = (
@@ -79,7 +82,26 @@ def make_scene(name: str) -> tuple[list[bytes], int]:
     for phase in range(count):
         grid = [["." for _ in range(COLS)] for _ in range(ROWS)]
         cycle = phase / count
-        if name == "兔兔跳跳":
+        if name == "霓虹小猫":
+            def put(points, color):
+                for x, y in points:
+                    if 0 <= x < COLS and 0 <= y < ROWS:
+                        grid[y][x] = color
+            # An actual 8×24 scene: the preview and uploaded LEDs use the same pixels.
+            put([(8, 0), (9, 1), (15, 1), (16, 0), (8, 1), (16, 1)], "M")
+            put([(x, 2) for x in range(7, 18)], "M")
+            put([(7, y) for y in range(3, 6)] + [(17, y) for y in range(3, 6)], "M")
+            put([(x, 6) for x in range(8, 17)], "M")
+            put([(x, 7) for x in range(6, 20)], "N")
+            put([(6, 5), (6, 6), (18, 5), (18, 6), (19, 6), (20, 5)], "N")
+            put([(9, 4), (15, 4)] if phase not in (6, 7) else [(9, 5), (15, 5)], "N")
+            put([(12, 5), (11, 6), (13, 6)], "M")
+            heart = [(2, 2), (4, 2), (1, 3), (3, 3), (5, 3), (2, 4), (4, 4), (3, 5)]
+            put(heart, "M" if phase < 8 else "P")
+            put([(21, 1), (21, 3), (20, 2), (22, 2)], "N")
+            if phase in (0, 4, 8, 12):
+                put([(3, 1), (22, 5)], "W")
+        elif name == "兔兔跳跳":
             travel = phase if phase <= 12 else 24 - phase
             _stamp(grid, _RABBIT, 2 + travel, -1 if phase % 6 in (2, 3) else 1)
             grid[7][2 + travel] = "P"

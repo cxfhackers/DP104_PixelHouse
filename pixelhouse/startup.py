@@ -19,16 +19,16 @@ def mac_agent_path() -> Path:
 def mac_program_arguments(app_path: Path | None = None) -> list[str]:
     if getattr(sys, "frozen", False):
         return [str(Path(app_path or sys.executable).resolve()), "--tray"]
-    script = Path(app_path or Path(__file__).resolve().parents[1] / "app.pyw").resolve()
+    script = Path(app_path or Path(__file__).resolve().parents[1] / "app_qt.py").resolve()
     return [str(Path(sys.executable).resolve()), str(script), "--tray"]
 
 
 def command_for_app(app_path: Path | None = None) -> str:
-    """Use the packaged exe, or pythonw plus app.pyw for source runs."""
+    """Use the packaged exe, or pythonw plus app_qt.py for source runs."""
     if getattr(sys, "frozen", False):
         executable = Path(app_path or sys.executable).resolve()
         return f'"{executable}" --tray'
-    script = Path(app_path or Path(__file__).resolve().parents[1] / "app.pyw").resolve()
+    script = Path(app_path or Path(__file__).resolve().parents[1] / "app_qt.py").resolve()
     runner = Path(sys.executable).with_name("pythonw.exe")
     if not runner.exists():
         runner = Path(sys.executable)

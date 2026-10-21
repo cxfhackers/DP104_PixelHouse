@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>DP104_PixelHouse</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <main id="app" aria-label="DP104 像素屋">
+    <header id="topbar" class="glass outer">
+      <div id="brand" aria-label="DP104_PixelHouse"><canvas class="brand-cat" id="brand-cat" width="56" height="48" aria-hidden="true"></canvas><strong>DP104_PixelHouse</strong></div>
+      <nav id="main-nav" aria-label="主导航">
+        <button class="nav-btn active" data-page="screen"><span class="nav-icon">▦</span> 点阵工坊</button>
+        <button class="nav-btn" data-page="home"><span class="nav-icon">▥</span> 今日总览</button>
+        <button class="nav-btn" data-page="setup"><span class="nav-icon">⚙</span> 小屋设置</button>
+      </nav>
+    </header>
+    <div id="window-actions"><button id="minimize" title="收进菜单栏" aria-label="收进菜单栏">▁</button><button id="exit" title="退出程序" aria-label="退出程序">×</button></div>
+
+    <section class="page active" id="screen-page">
+      <div id="upper">
+        <section id="preview-card" class="glass card">
+          <div class="card-head"><h1>点阵预览</h1><span>8 × 24</span></div>
+          <div class="matrix-shell"><canvas id="preview-canvas" width="768" height="256" aria-label="8 行 24 列动画预览"></canvas></div>
+          <div class="preview-meta"><span id="preview-name">霓虹小猫</span><span id="preview-count">24 帧 · 8 fps</span></div>
+          <div class="preview-controls">
+            <button class="pixel-btn primary" id="play">▶　播放预览</button>
+            <button class="pixel-btn" id="stop">■　停止</button>
+            <button class="pixel-btn" id="loop">⟳　循环播放⌄</button>
+            <label class="speed-label" for="preview-speed">速度</label>
+            <input type="range" id="preview-speed" min="1" max="3" step="0.1" value="1">
+            <span id="speed-value">1.0×</span>
+          </div>
+        </section>
+
+        <section id="device-card" class="glass card">
+          <div class="card-head"><h1>键盘连接</h1></div>
+          <div id="device-identity" class="inset"><div class="keyboard-icon" aria-hidden="true">▤</div><div><strong>DP104_PixelHouse</strong><span id="device-connection" class="status offline">●　未连接</span></div><button id="probe" title="重新探测键盘" aria-label="重新探测键盘">›</button></div>
+          <h2>设备状态</h2><div class="inset status-panel"><span id="device-health" class="offline">●　等待键盘连接</span><span id="device-port">USB 未连接</span></div>
+          <div class="divider"></div>
+          <label class="field-label" for="device-mode">屏幕模式</label><select id="device-mode"></select>
+          <label class="field-label brightness-title" for="brightness">屏幕亮度 <span id="brightness-value">80%</span></label>
+          <div class="range-row"><span class="sun">☼</span><input type="range" id="brightness" min="0" max="100" value="80"></div>
+          <p class="device-note">亮度作用于上传的 DIY 画面；模式切换使用键盘 HID。<button class="pixel-btn" id="restart-usb" hidden>重启键盘 USB</button></p>
+        </section>
+      </div>
+
+      <section id="workshop" class="glass card">
+        <div id="gallery-tabs" role="tablist" aria-label="工坊功能">
+          <button class="gallery-tab active" data-tab="effects" role="tab"><span>✣</span> 内置特效</button>
+          <button class="gallery-tab" data-tab="create" role="tab"><span>✎</span> 像素创作</button>
+          <button class="gallery-tab" data-tab="mine" role="tab"><span>▣</span> 我的预设</button>
+          <button class="gallery-tab" data-tab="ai" role="tab"><span>▣</span> AI 工坊</button>
+          <button class="gallery-tab" data-tab="text" role="tab"><span>Ｔ</span> 文本槽</button>
+          <button class="gallery-tab" data-tab="lights" role="tab"><span>♧</span> 灯光控制</button>
+        </div>
+        <div id="gallery-body">
+          <div class="tab-pane active" id="effects-pane"><div id="effects-grid"></div></div>
+          <div class="tab-pane" id="create-pane"><div class="pane-toolbar"><button class="pixel-btn primary" id="open-editor">▦　编辑当前动画</button><button class="pixel-btn" id="import-animation">⬆　导入动图 / 图片序列</button><select id="import-fit"><option>完整显示</option><option>裁切填满</option><option>拉伸填满</option></select><button class="pixel-btn" id="save-current">保存当前预览</button><button class="pixel-btn accent upload-current">送上键盘</button></div><p class="pane-hint">像素宠物与小剧场 · 点击后先预览，再编辑或上传</p><div id="pets-grid"></div></div>
+          <div class="tab-pane" id="mine-pane"><div class="pane-toolbar"><button class="pixel-btn" id="import-preset">导入预设…</button><button class="pixel-btn primary" id="save-current-mine">存当前预览</button><span class="pane-hint">选择预设可预览，点菜单可编辑、重命名、导出或删除。</span></div><div id="presets-grid"></div></div>
+          <div class="tab-pane" id="ai-pane"><p class="pane-hint">实体屏幕只有 8×24 颗灯珠。描述主体、动作和方向，生成后可预览、编辑、保存和上传。</p><textarea id="ai-prompt" placeholder="例：粉色爱心脉冲呼吸，节奏轻快"></textarea><div class="pane-toolbar"><button class="pixel-btn primary" id="ai-generate">✦　让 AI 画</button><button class="pixel-btn" id="ai-save">存为预设</button><button class="pixel-btn accent upload-current">送上键盘</button><label for="ai-tween">过渡</label><select id="ai-tween"><option value="1">原始帧</option><option value="2">柔滑 2×</option><option value="3">柔滑 3×</option></select></div><p id="ai-status" class="pane-hint"></p></div>
+          <div class="tab-pane" id="text-pane"><div class="pane-toolbar"><span>槽位</span><div id="slot-buttons"></div></div><input id="slot-text" maxlength="30" placeholder="输入英文、数字或 ASCII 符号，最多 30 字符"><div class="pane-toolbar"><button class="pixel-btn" id="slot-read">读取文本槽</button><button class="pixel-btn primary" id="slot-write">写入此槽</button><button class="pixel-btn" id="slot-export">备份 5 槽…</button><button class="pixel-btn" id="slot-restore">恢复备份…</button></div><p class="pane-hint">固件滚动字体不显示小写字母；写入时自动转为大写。</p></div>
+          <div class="tab-pane" id="lights-pane"><div class="pane-toolbar"><button class="pixel-btn primary" id="light-read">读取键盘灯光</button><span class="pane-hint">读取完成后才能修改并应用；设置会写入实体键盘。</span></div><div id="light-groups"></div></div>
+        </div>
+        <div id="workshop-foot"><span id="notice">小屋已开门，正在寻找 DP104 键盘…</span><button class="pixel-btn accent upload-current" id="upload-footer">上传当前画面 ▸</button></div>
+      </section>
+    </section>
+
+    <section class="page" id="home-page">
+      <div class="secondary-grid"><div class="glass card stat-card"><h1>今日总览</h1><div class="big-number" id="keys-today">0</div><p>今日按键</p><div class="stat-line"><span id="speed-today">0 键/分 · 0 WPM</span><span id="milestone-left">下一里程碑</span></div></div><div class="glass card stat-card"><h1>键盘连接</h1><p id="home-device">等待 DP104</p><p>键位统计仅来自 DP104，不记录输入文字。</p><button class="pixel-btn primary" id="go-workshop">去点阵工坊 ▸</button></div></div>
+      <div class="glass card keymap-card"><h1>DP104 今日键位图</h1><canvas id="keymap-canvas" width="1300" height="460" aria-label="键位热力图"></canvas><p id="keymap-hint">颜色越亮，今天按得越多 · 点击键帽查看次数</p></div>
+    </section>
+
+    <section class="page" id="setup-page">
+      <div class="settings-grid">
+        <div class="glass card setting-card"><h1>AI 接入</h1><p>OpenAI 兼容的 Chat Completions 接口</p><label>接口地址<input id="ai-url" placeholder="https://api.openai.com/v1"></label><label>API Key<input id="ai-key" type="password" placeholder="留空表示保留当前密钥"></label><label>模型名称<input id="ai-model" placeholder="gpt-4o-mini"></label><div class="pane-toolbar"><button class="pixel-btn primary" id="ai-settings-save">保存配置</button><button class="pixel-btn" id="ai-test">测试连接</button><button class="pixel-btn" id="ai-key-clear">清除密钥</button></div><p>密钥只存储在本机数据目录。</p></div>
+        <div class="glass card setting-card"><h1>定时场景</h1><label class="inline-check"><input type="checkbox" id="schedule-enabled">启用定时场景</label><div id="rules-list"></div><div class="pane-toolbar"><input id="rule-start" placeholder="09:00" value="09:00"><input id="rule-end" placeholder="18:00" value="18:00"><select id="rule-mode"></select></div><div class="pane-toolbar"><button class="pixel-btn" id="rule-add">添加规则</button><button class="pixel-btn primary" id="rule-save">保存场景</button></div><p>跨零点时段可填写 22:00–07:00。</p></div>
+        <div class="glass card setting-card"><h1>打字里程碑</h1><label class="inline-check"><input type="checkbox" id="milestone-enabled">达到档位后自动推送庆祝画面</label><label>档位 · 每多少键<input id="milestone-step" type="number" min="500" max="20000" step="500"></label><button class="pixel-btn primary" id="milestone-save">保存里程碑设置</button><p>macOS 默认关闭自动上传；开启前请确认键盘屏幕状态。</p></div>
+        <div class="glass card setting-card"><h1>小屋数据</h1><p>打字统计、AI 配置与预设只保存在本机。</p><label class="inline-check"><input type="checkbox" id="startup-enabled">登录后自动进入菜单栏</label><div class="pane-toolbar"><button class="pixel-btn" id="open-data">打开数据目录</button><button class="pixel-btn" id="hide-window">收进菜单栏</button></div></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="dialog-layer" hidden><div class="dialog glass"><h2 id="dialog-title"></h2><p id="dialog-message"></p><input id="dialog-input"><div class="dialog-buttons"><button class="pixel-btn" id="dialog-cancel">取消</button><button class="pixel-btn primary" id="dialog-ok">确定</button></div></div></div>
+<div id="editor-layer" hidden><div class="editor glass"><div class="editor-head"><h1>▦　8×24 像素动画编辑器</h1><button id="editor-close" aria-label="关闭编辑器">×</button></div><p>点按或拖动修改灯珠 · 最多 200 帧 · 应用和保存不会立刻写入键盘</p><div class="editor-main"><canvas id="editor-canvas" width="768" height="256"></canvas><div class="editor-tools"><div class="pane-toolbar"><button class="pixel-btn active-tool" data-tool="paint">画笔</button><button class="pixel-btn" data-tool="erase">橡皮</button><button class="pixel-btn" data-tool="pick">取色</button></div><div id="editor-palette"></div><label>自选颜色<input type="color" id="editor-color" value="#ff8cae"></label><label class="inline-check"><input type="checkbox" id="editor-onion">显示上一帧参考</label></div></div><div id="frame-strip" aria-label="动画帧列表"></div><div class="editor-bottom"><div class="pane-toolbar"><button class="pixel-btn" id="frame-prev">◀</button><span id="frame-count">帧 1 / 1</span><button class="pixel-btn" id="frame-next">▶</button><button class="pixel-btn" id="frame-add">新增帧</button><button class="pixel-btn" id="frame-copy">复制帧</button><button class="pixel-btn" id="frame-delete">删除帧</button><button class="pixel-btn" id="frame-mirror">左右镜像</button><button class="pixel-btn" id="frame-clear">清空本帧</button><button class="pixel-btn" id="frame-undo">撤销</button><button class="pixel-btn" id="editor-play">▶ 试播</button><label>帧率 <input id="editor-fps" type="number" min="1" max="30" value="8"></label></div><div class="pane-toolbar"><button class="pixel-btn" id="editor-apply">应用到预览</button><button class="pixel-btn primary" id="editor-save">存为预设</button><button class="pixel-btn accent" id="editor-upload">送上键盘</button></div></div></div></div>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

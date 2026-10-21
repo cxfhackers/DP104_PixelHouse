@@ -10,10 +10,13 @@ if not exist "%VENV%\Scripts\pythonw.exe" (
     python -m venv "%VENV%"
   )
   if errorlevel 1 goto setup_error
+)
+"%VENV%\Scripts\python.exe" -c "import PySide6.QtWebEngineWidgets, hid, serial, PIL, requests" >nul 2>nul
+if errorlevel 1 (
   "%VENV%\Scripts\python.exe" -m pip install -r requirements.txt
   if errorlevel 1 goto setup_error
 )
-start "" "%VENV%\Scripts\pythonw.exe" "%~dp0app.pyw"
+start "" "%VENV%\Scripts\pythonw.exe" "%~dp0app_qt.py"
 exit /b 0
 
 :setup_error

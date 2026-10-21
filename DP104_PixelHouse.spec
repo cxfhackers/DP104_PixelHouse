@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['app.pyw'],
+    ['app_qt.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('pixelhouse/ui', 'pixelhouse/ui'), ('pixelhouse/assets', 'pixelhouse/assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
