@@ -173,31 +173,37 @@ def upload_animation(port_name: str, frames: list[bytes], fps: int = 8) -> dict:
 def upload_animation_hid(device, frames: list[bytes], fps: int = 8) -> dict:
     """Official-client HID fallback: D1/30 header, then D1/31 25-byte chunks."""
     _validate_animation(frames, fps)
+    data = b"".join(frames)
     trace = {}
     header = hid_command(device, [0xD1, 0x30, len(frames), fps, ROWS, COLS], timeout=0.8,
                          trace=trace)
-    if header is None:
-        if "matching_opcode" in trace:
-            length, prefix, status = trace["matching_opcode"]
-            raise TransferError(f"HID 帧头回执不匹配：长度 {length}，前 8 字节 {prefix}，末字节 0x{status:02X}")
-        if trace.get("reports"):
-            others = ", ".join(trace.get("other_opcodes", []))
-            raise TransferError(f"未收到 HID 帧头回执；收到 {trace['reports']} 条其他报告（{others}）")
-        raise TransferError("发送 HID 帧头后，未收到任何输入报告")
-    if header[0] == 0xFF:
-        raise TransferError("键盘返回 HID 动画帧头拒绝码 0xFF")
-    if len(header) < 32:
-        raise TransferError(f"HID 动画帧头回执长度异常：{len(header)} 字节")
-    if header[-1] != 0:
-        raise TransferError(f"键盘拒绝 HID 动画帧头，状态码 0x{header[-1]:02X}")
-    data = b"".join(frames)
+    if header is not None:
+        if header[0] == 0xFF:
+            raise TransferError("键盘返回 HID 动画帧头拒绝码 0xFF")
+        if len(header) < 32:
+            raise TransferError(f"HID 动画帧头回执长度异常：{len(header)} 字节")
+        if header[-1] != 0:
+            raise TransferError(f"键盘拒绝 HID 动画帧头，状态码 0x{header[-1]:02X}")
+    elif "matching_opcode" in trace:
+        length, prefix, status = trace["matching_opcode"]
+        raise TransferError(f"HID 帧头回执不匹配：长度 {length}，前 8 字节 {prefix}，末字节 0x{status:02X}")
+    # This firmware sometimes accepts D1/30 but omits its input report. A
+    # matching D1/31 offset-zero reply proves that it entered transfer mode.
+    # Never resend the header here: while transfer mode is active, the firmware
+    # silently ignores another header and waits for the remaining chunks.
     for offset in range(0, len(data), 25):
         chunk = data[offset:offset + 25]
         payload = [0xD1, 0x31, *offset.to_bytes(4, "big"), len(chunk), *chunk]
         reply = hid_command(device, payload, timeout=0.8)
         if reply is None or reply[0] == 0xFF or len(reply) < len(payload):
+            if offset == 0 and header is None:
+                others = ", ".join(trace.get("other_opcodes", []))
+                detail = (f"收到 {trace['reports']} 条其他报告（{others}）" if trace.get("reports")
+                          else "未收到任何输入报告")
+                raise TransferError(f"HID 帧头未确认，首个动画分片也未确认；帧头阶段{detail}")
             raise TransferError(f"键盘 HID 未确认动画分片 {offset}")
-    return {"frames": len(frames), "chunks": (len(data) + 24) // 25, "acknowledged": True}
+    return {"frames": len(frames), "chunks": (len(data) + 24) // 25,
+            "acknowledged": True, "header_acknowledged": header is not None}
 
 
 def send_animation(device, port_name: str, frames: list[bytes], fps: int = 8) -> dict:
@@ -205,9 +211,20 @@ def send_animation(device, port_name: str, frames: list[bytes], fps: int = 8) ->
 
 
 def send_animation_hid(device, frames: list[bytes], fps: int = 8) -> dict:
-    # The official HID client transfers while the current screen mode remains
-    # unchanged. Switching to CUSTOM first can make this firmware reject D1/30.
-    return upload_animation_hid(device, frames, fps)
+    # Transfer in the current mode, then select CUSTOM after the final chunk
+    # so the newly uploaded artwork is visible on the physical screen.
+    receipt = upload_animation_hid(device, frames, fps)
+    mode = hid_command(device, [0x08, 26, 2], timeout=0.5)
+    if mode is None or len(mode) < 4 or mode[0] == 0xFF:
+        raise RuntimeError("画面已上传，但无法读取屏幕模式")
+    if mode[3] != 2:
+        changed = hid_command(device, [0x07, 26, 2, 2], timeout=0.5)
+        if changed is None or changed[0] == 0xFF:
+            raise RuntimeError("画面已上传，但无法切换到自定义屏幕模式")
+        verified = hid_command(device, [0x08, 26, 2], timeout=0.5)
+        if verified is None or len(verified) < 4 or verified[3] != 2:
+            raise RuntimeError("画面已上传，但无法确认自定义屏幕模式")
+    return receipt
 
 
 def _send_animation_with_transfer(device, transfer) -> dict:
@@ -267,7 +284,8 @@ class DeviceWorker:
 
     def _serial_state(self, descriptor: dict, device=None) -> dict:
         port = find_port(descriptor)
-        state = {"connected": True, "serial": False, "port": port,
+        state = {"connected": True, "name": str(descriptor.get("product_string") or "DP104").strip() or "DP104",
+                 "serial": False, "port": port,
                  "serial_error": "", "serial_verified": False, "transport": None,
                  "cdc_support": hid_cdc_support(device) if device is not None else None}
         if port:
@@ -402,7 +420,7 @@ class DeviceWorker:
                             if mode_reply and len(mode_reply) >= 4 and mode_reply[3] in MODES:
                                 self.updates.put(("mode", mode_reply[3]))
                         confirmation = "分片回执已核对" if receipt["acknowledged"] else "固件未启用分片回执"
-                        self.updates.put(("notice", f"已传输 {receipt['frames']} 帧，{confirmation}；请按屏幕旁实体键切到 DIY 查看"))
+                        self.updates.put(("notice", f"已上传 {receipt['frames']} 帧，{confirmation}；键盘已切到自定义画面"))
                     elif action == "text_write":
                         slot, text = value
                         if textslots.write_slot(device, int(slot), str(text), hid_command):

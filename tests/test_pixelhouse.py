@@ -447,12 +447,30 @@ class PixelHouseTests(unittest.TestCase):
         fake = FakeHID()
         frame = bytes(i % 256 for i in range(576))
         receipt = upload_animation_hid(fake, [frame], 8)
-        self.assertEqual(receipt, {"frames": 1, "chunks": 24, "acknowledged": True})
+        self.assertEqual(receipt, {"frames": 1, "chunks": 24, "acknowledged": True,
+                                   "header_acknowledged": True})
         self.assertEqual(fake.sent[0][:7], [0, 0xD1, 0x30, 1, 8, 8, 24])
         self.assertEqual(fake.sent[1][:8], [0, 0xD1, 0x31, 0, 0, 0, 0, 25])
         self.assertEqual(fake.sent[-1][7], 1)
         self.assertEqual(fake.sent[-1][8], frame[-1])
         self.assertTrue(all(len(report) == 33 for report in fake.sent))
+
+    def test_hid_upload_continues_when_header_reply_is_lost_but_first_chunk_acks(self):
+        class FakeHID:
+            def __init__(self):
+                self.sent = []
+
+            def write(self, report):
+                self.sent.append(report)
+
+            def read(self, _length):
+                return [] if self.sent[-1][2] == 0x30 else self.sent[-1][1:]
+
+        fake = FakeHID()
+        receipt = upload_animation_hid(fake, [bytes(576)])
+        self.assertEqual(receipt["chunks"], 24)
+        self.assertFalse(receipt["header_acknowledged"])
+        self.assertEqual(len(fake.sent), 25)
 
     def test_hid_upload_stops_on_unacknowledged_chunk(self):
         class FakeHID:
@@ -552,13 +570,22 @@ class PixelHouseTests(unittest.TestCase):
             send_animation(object(), "COM5", [bytes(576)])
         self.assertEqual(events, [(8, 26, 2), "upload", (8, 26, 2)])
 
-    def test_hid_upload_does_not_switch_screen_mode_before_header(self):
-        with patch("pixelhouse.device.hid_command") as command, \
-             patch("pixelhouse.device.upload_animation_hid",
-                   return_value={"frames": 1, "chunks": 24, "acknowledged": True}) as upload:
+    def test_hid_upload_selects_custom_mode_after_transfer(self):
+        events = []
+
+        def command(_device, payload, **_kwargs):
+            events.append(tuple(payload))
+            return bytes([8, 26, 2, 1] if payload[0] == 8 and len(events) == 2
+                         else [8, 26, 2, 2])
+
+        def upload(_device, _frames, _fps):
+            events.append("upload")
+            return {"frames": 1, "chunks": 24, "acknowledged": True}
+
+        with patch("pixelhouse.device.hid_command", side_effect=command), \
+             patch("pixelhouse.device.upload_animation_hid", side_effect=upload):
             send_animation_hid(object(), [bytes(576)])
-        upload.assert_called_once()
-        command.assert_not_called()
+        self.assertEqual(events, ["upload", (8, 26, 2), (7, 26, 2, 2), (8, 26, 2)])
 
 
 def one_packet_read(device, payload, **kwargs):
