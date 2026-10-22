@@ -28,11 +28,14 @@ html,body{user-select:auto}
 /* Approved prototype coordinates: 1448 × 1086. The skyline remains behind
    the glass; the roof border bends beneath the cat instead of crossing it. */
 #app:before{display:none}
-#frame-chrome{position:absolute;inset:0;width:1448px;height:1086px;z-index:6;pointer-events:none;overflow:visible;fill:none;stroke-linecap:square;stroke-linejoin:miter}
-.frame-glow{stroke:#b6b5ff;stroke-width:4;filter:drop-shadow(0 0 5px #bdb4ff) drop-shadow(0 0 10px #6982ff)}
-.frame-fine{stroke:#657df4;stroke-width:2;opacity:.85}
-.frame-roof{stroke:#d1c3ff;stroke-width:3;filter:drop-shadow(0 0 5px #aaabff)}
-.frame-corner{stroke:#d4d5ff;stroke-width:5}
+#frame-chrome{position:absolute;inset:0;width:1448px;height:1086px;z-index:12;pointer-events:none;mix-blend-mode:lighten}
+.frame-art{position:absolute;display:block;background:url('../assets/prototype-skin.png') 0 0 / 1448px 1086px no-repeat;image-rendering:pixelated}
+.frame-top-left{left:20px;top:50px;width:70px;height:110px;background-position:-20px -50px}
+.frame-top-edge{left:90px;top:50px;width:945px;height:20px;background-position:-90px -50px}
+.frame-roof{left:1035px;top:50px;width:413px;height:110px;background-position:-1035px -50px}
+.frame-left-edge{left:20px;top:160px;width:43px;height:860px;background-position:-20px -160px}
+.frame-right-edge{right:0;top:160px;width:48px;height:860px;background-position:-1400px -160px}
+.frame-bottom-edge{left:20px;bottom:0;width:1428px;height:66px;background-position:-20px -1020px}
 .glass{background:linear-gradient(120deg,rgba(31,43,96,.50),rgba(18,30,82,.56) 55%,rgba(49,37,113,.35));backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);border-color:#8498ee;box-shadow:inset 0 0 0 2px rgba(109,123,235,.35),inset 0 0 19px rgba(116,104,242,.15),0 0 7px #8298ff,0 0 13px rgba(83,97,248,.42)}
 .glass:before{width:22px;height:22px;border-width:3px;opacity:.8}
 .glass:after{width:22px;height:22px;border-width:3px;opacity:.8}
@@ -99,3 +102,36 @@ html,body{user-select:auto}
 #device-health,#device-port{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #device-port{flex:0 1 auto;min-width:0;text-align:right}
 #device-card .divider{margin:10px 0 10px}
+
+/* Keep the reference artwork inside the scaled stage while extending its
+   skyline across any extra space created by a different window aspect ratio. */
+html{background:#0a1245}
+body{background:#0a1245 url('../assets/night-city.png') center center / cover no-repeat}
+#app{background:transparent}
+#app:before{display:block;inset:0;border:0;box-shadow:none;clip-path:none;background:url('../assets/night-city.png') center / 100% 100% no-repeat;pointer-events:none;-webkit-mask-image:linear-gradient(to right,transparent,#000 3%,#000 97%,transparent),linear-gradient(to bottom,transparent,#000 3%,#000 97%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(to right,transparent,#000 3%,#000 97%,transparent),linear-gradient(to bottom,transparent,#000 3%,#000 97%,transparent);mask-composite:intersect}
+
+/* The device brightness control uses the same proportions and colors as the
+   reference instead of the narrower generic range control. */
+#device-card .sun{width:36px;height:38px;flex:none;font-size:0;background:url('../assets/prototype-skin.png') -967px -557px / 1448px 1086px no-repeat;image-rendering:pixelated}
+#device-card .range-row input[type=range]{height:15px;border:2px solid #6b80cf;border-radius:9px;background:linear-gradient(90deg,#4079ff 0%,#f5b0f3 var(--brightness-progress,80%),#20346e var(--brightness-progress,80%),#20346e 100%);box-shadow:0 0 5px rgba(91,118,255,.55),inset 0 0 3px #102450}
+#device-card .range-row input[type=range]::-webkit-slider-thumb{width:20px;height:31px;border:2px solid #a78aff;border-radius:6px;background:#fff8ff;box-shadow:0 0 9px #c680ff}
+
+/* Small corrections on the original 1448 × 1086 prototype layout. */
+#frame-chrome{z-index:8}
+#brand-word{display:block;flex:none;width:72px;height:24px;image-rendering:pixelated;filter:drop-shadow(0 0 4px #a8b8ff)}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#device-identity>div:nth-child(2){flex:1;min-width:0}
+#device-name{display:block;font-size:15px;line-height:1.15;overflow-wrap:break-word}
+#device-connection{white-space:nowrap;font-size:14px}
+#probe{flex:none;white-space:nowrap}
+#preview-card .preview-controls{gap:10px}
+#preview-speed{height:8px;border-radius:4px;border-color:#678fea;background:linear-gradient(90deg,#219cff,#62d8ff var(--speed-progress,0%),#263f78 var(--speed-progress,0%))}
+#preview-speed::-webkit-slider-thumb{width:15px;height:27px;border-radius:3px}
+#speed-value{white-space:nowrap}
+#device-card .range-row input[type=range]{height:9px;border-width:1px}
+#device-card .range-row{gap:10px}
+#device-card .range-row input[type=range]{flex:1;min-width:0;width:auto}
+#brightness-value{position:static;flex:none;min-width:43px;font:700 18px var(--pixel);text-align:right;color:#eff2ff;text-shadow:0 0 4px #96a7ff}
+.nav-icon,.gallery-tab span,.keyboard-icon,#device-card .sun{background-image:none}
+.nav-icon .ui-icon,.gallery-tab span .ui-icon,.keyboard-icon .ui-icon,#device-card .sun .ui-icon{display:block;width:100%;height:100%;color:#dce9ff;filter:drop-shadow(0 0 1px #87aaff)}
+.gallery-tab.active span .ui-icon{color:#69f0ff}

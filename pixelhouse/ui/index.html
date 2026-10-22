@@ -10,14 +10,16 @@
 <body>
 <div id="stage">
   <main id="app" aria-label="DP104 像素屋">
-    <svg id="frame-chrome" viewBox="0 0 1448 1086" aria-hidden="true">
-      <path class="frame-glow" d="M46 58H1041L1081 107H1391L1422 138V1028L1400 1052H48L26 1030V79Z"/>
-      <path class="frame-fine" d="M49 64H1037L1077 113H1388L1415 141V1024L1396 1045H52L33 1026V83Z"/>
-      <path class="frame-roof" d="M1042 58L1081 107H1391L1422 138"/>
-      <path class="frame-corner" d="M29 83V70H42 M1407 1050H1420V1036 M1040 58H1047 M1387 106H1396"/>
-    </svg>
+    <div id="frame-chrome" aria-hidden="true">
+      <span class="frame-art frame-top-left"></span>
+      <span class="frame-art frame-top-edge"></span>
+      <span class="frame-art frame-roof"></span>
+      <span class="frame-art frame-left-edge"></span>
+      <span class="frame-art frame-right-edge"></span>
+      <span class="frame-art frame-bottom-edge"></span>
+    </div>
     <header id="topbar" class="glass outer">
-      <div id="brand" aria-label="DP104_PixelHouse"><canvas class="brand-cat" id="brand-cat" width="56" height="48" aria-hidden="true"></canvas><strong>DP104_PixelHouse</strong></div>
+      <div id="brand" aria-label="像素屋"><canvas class="brand-cat" id="brand-cat" width="56" height="48" aria-hidden="true"></canvas><canvas id="brand-word" width="72" height="24" aria-hidden="true"></canvas><strong class="visually-hidden">像素屋</strong></div>
       <nav id="main-nav" aria-label="主导航">
         <button class="nav-btn active" data-page="screen"><span class="nav-icon">▦</span> 点阵工坊</button>
         <button class="nav-btn" data-page="home"><span class="nav-icon">▥</span> 今日总览</button>
@@ -45,13 +47,12 @@
 
         <section id="device-card" class="glass card">
           <div class="card-head"><h1>键盘连接</h1></div>
-          <div id="device-identity" class="inset"><div class="keyboard-icon" aria-hidden="true"></div><div><strong>DP104_PixelHouse</strong><span id="device-connection" class="status offline">●　未连接</span></div><button id="probe" title="检测 HID 上传与 USB 串口" aria-label="检测 HID 上传与 USB 串口">检测</button></div>
+          <div id="device-identity" class="inset"><div class="keyboard-icon" aria-hidden="true"></div><div><strong id="device-name">DP104</strong><span id="device-connection" class="status offline">●　未连接</span></div><button id="probe" title="检测 HID 上传与 USB 串口" aria-label="检测 HID 上传与 USB 串口">检测</button></div>
           <h2>设备状态</h2><div class="inset status-panel"><span id="device-health" class="offline">●　等待键盘连接</span><span id="device-port">USB 未连接</span></div>
-          <p id="device-diagnostic" aria-live="polite">点击「检测」查看接口详情</p>
           <div class="divider"></div>
           <label class="field-label" for="device-mode">屏幕模式</label><select id="device-mode"></select>
-          <label class="field-label brightness-title" for="brightness">屏幕亮度 <span id="brightness-value">80%</span></label>
-          <div class="range-row"><span class="sun">☼</span><input type="range" id="brightness" min="0" max="100" value="80"></div>
+          <label class="field-label brightness-title" for="brightness">屏幕亮度</label>
+          <div class="range-row"><span class="sun">☼</span><input type="range" id="brightness" min="0" max="100" value="80"><span id="brightness-value">80%</span></div>
           <p class="device-note">亮度作用于上传的 DIY 画面；模式切换使用键盘 HID。<button class="pixel-btn" id="restart-usb" hidden>重启键盘 USB</button></p>
         </section>
       </div>
@@ -95,6 +96,7 @@
 <div id="dialog-layer" hidden><div class="dialog glass"><h2 id="dialog-title"></h2><p id="dialog-message"></p><input id="dialog-input"><div class="dialog-buttons"><button class="pixel-btn" id="dialog-cancel">取消</button><button class="pixel-btn primary" id="dialog-ok">确定</button></div></div></div>
 <div id="editor-layer" hidden><div class="editor glass"><div class="editor-head"><h1>▦　8×24 像素动画编辑器</h1><button id="editor-close" aria-label="关闭编辑器">×</button></div><p>点按或拖动修改灯珠 · 最多 200 帧 · 应用和保存不会立刻写入键盘</p><div class="editor-main"><canvas id="editor-canvas" width="768" height="256"></canvas><div class="editor-tools"><div class="pane-toolbar"><button class="pixel-btn active-tool" data-tool="paint">画笔</button><button class="pixel-btn" data-tool="erase">橡皮</button><button class="pixel-btn" data-tool="pick">取色</button></div><div id="editor-palette"></div><label>自选颜色<input type="color" id="editor-color" value="#ff8cae"></label><label class="inline-check"><input type="checkbox" id="editor-onion">显示上一帧参考</label></div></div><div id="frame-strip" aria-label="动画帧列表"></div><div class="editor-bottom"><div class="pane-toolbar"><button class="pixel-btn" id="frame-prev">◀</button><span id="frame-count">帧 1 / 1</span><button class="pixel-btn" id="frame-next">▶</button><button class="pixel-btn" id="frame-add">新增帧</button><button class="pixel-btn" id="frame-copy">复制帧</button><button class="pixel-btn" id="frame-delete">删除帧</button><button class="pixel-btn" id="frame-mirror">左右镜像</button><button class="pixel-btn" id="frame-clear">清空本帧</button><button class="pixel-btn" id="frame-undo">撤销</button><button class="pixel-btn" id="editor-play">▶ 试播</button><label>帧率 <input id="editor-fps" type="number" min="1" max="30" value="8"></label></div><div class="pane-toolbar"><button class="pixel-btn" id="editor-apply">应用到预览</button><button class="pixel-btn primary" id="editor-save">存为预设</button><button class="pixel-btn accent" id="editor-upload">送上键盘</button></div></div></div></div>
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="icons.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
